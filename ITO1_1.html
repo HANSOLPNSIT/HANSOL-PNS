@@ -1,0 +1,375 @@
+
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>ITO · 25년 발주 현황 & 발주서 PDF 출력</title>
+
+  <!-- SheetJS -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <!-- XLSX-CALC (엑셀 수식 재계산) -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx-calc@0.4.3/dist/xlsx-calc.min.js"></script>
+  <!-- html2pdf (html2canvas + jsPDF 번들) -->
+  <script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js"></script>
+
+  <style>
+    :root{
+      --bg:#0f172a;--panel:#111827;--ink:#e5e7eb;--muted:#9ca3af;--accent:#60a5fa;--border:#1f2937;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--ink);
+      font-family:system-ui,-apple-system,Segoe UI,Roboto,"Apple SD Gothic Neo","Noto Sans KR",sans-serif}
+    header{position:sticky;top:0;background:linear-gradient(180deg,rgba(15,23,42,.98),rgba(15,23,42,.94));backdrop-filter:blur(6px);
+      border-bottom:1px solid var(--border);padding:14px 16px;z-index:10}
+    h1{margin:0;font-size:18px}
+    .bar{display:flex;gap:10px;align-items:center;margin-top:10px;flex-wrap:wrap}
+    .btn, input[type="file"]::file-selector-button{
+      background:var(--accent);color:#0b1220;border:0;padding:8px 12px;border-radius:12px;font-weight:600;cursor:pointer
+    }
+    .muted{color:var(--muted);font-size:12px}
+    .panel{max-width:1200px;margin:18px auto;padding:16px}
+    .tblwrap{border:1px solid var(--border);border-radius:14px;overflow:hidden;background:rgba(17,24,39,.6)}
+    table{width:100%;border-collapse:collapse}
+    thead th{position:sticky;top:0;background:#0b1220;border-bottom:1px solid var(--border);padding:10px;font-weight:700}
+    tbody td{border-top:1px solid var(--border);padding:10px;vertical-align:middle}
+    .leftcol{width:90px;white-space:nowrap}
+    .search{flex:1;min-width:240px;border:1px solid var(--border);background:#0b1220;color:var(--ink);border-radius:12px;padding:10px 12px}
+    .pill{padding:6px 10px;border:1px dashed var(--border);border-radius:999px}
+    .money{text-align:right;white-space:nowrap}
+    .pdfbtn{background:#e2e8f0;color:#0b1220;border:0;padding:6px 10px;border-radius:10px;cursor:pointer;font-weight:700}
+    .hint{margin-top:8px}
+
+    /* PDF 전용 영역 */
+    #printArea{position:fixed;left:-9999px;top:-9999px;background:#fff;color:#111;padding:0;margin:0}
+
+    /* A4 레이아웃 (폴백 템플릿용) */
+    @page{ size:A4; margin:10mm }
+    .sheet{ width:210mm; min-height:297mm; padding:10mm; }
+    .sheet h2{ margin:0 0 8px; font-size:18px }
+    .kv{ display:grid; grid-template-columns:110px 1fr; gap:6px 10px; margin:6px 0 12px }
+    .kv .k{ color:#374151 }
+    .tbl{ width:100%; border-collapse:collapse; margin-top:8px }
+    .tbl th,.tbl td{ border:1px solid #e5e7eb; padding:6px 8px; font-size:12px }
+    .tot{ text-align:right; margin-top:8px; font-weight:700 }
+    .muted2{ color:#6b7280; font-size:12px; margin-top:4px }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>ITO · 25년 발주 현황 &nbsp;<span class="muted">/ 발주서 PDF 출력</span></h1>
+    <div class="bar">
+      <input id="search" class="search" placeholder="검색: 발주일·발주번호·공급처·내용·금액·기간(부분검색 가능)" />
+      <span class="pill">A4 · 1페이지 = 행 1~44 · 2페이지 = 행 45~109</span>
+      <label class="btn" for="file">파일 선택</label>
+      <input id="file" type="file" accept=".xlsx,.xlsb,.xlsm,.xls" style="display:none" />
+      <button id="reload" class="btn" title="같은 폴더의 ITO.xlsx 자동 읽기">동일 폴더의 ITO.xlsx 재로드</button>
+    </div>
+    <div class="muted hint">같은 폴더에 <b>ITO.xlsx</b>가 있으면 자동 로드됩니다. 없다면 ‘파일 선택’으로 올려주세요.</div>
+  </header>
+
+  <main class="panel">
+    <div class="tblwrap">
+      <table id="grid">
+        <thead>
+          <tr>
+            <th class="leftcol">PDF</th>
+            <th>발주일</th>
+            <th>발주번호</th>
+            <th>공급처</th>
+            <th>내용</th>
+            <th>발주금액</th>
+            <th>FROM</th>
+            <th>TO</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div class="muted hint">* PDF 버튼을 누르면 해당 행의 <b>발주번호</b>를 <code>발주서!C7</code>에 주입하고, 수식 재계산을 시도합니다. 실패 시 자동으로 폴백 템플릿으로 PDF를 생성합니다.</div>
+  </main>
+
+  <!-- 발주서 렌더링(HTML→PDF) 임시 영역 -->
+  <div id="printArea"></div>
+
+<script>
+(() => {
+  const STATE = {
+    wb: null,
+    rows: [],
+    headerMap: null
+  };
+
+  const fmtMoney = (v) => {
+    const n = Number(v ?? 0);
+    if (isNaN(n)) return String(v ?? '');
+    return n.toLocaleString('ko-KR') + '원';
+  };
+  const fmtDate = (v) => {
+    if (v == null || v === '') return '';
+    if (typeof v === 'number') {
+      const d = XLSX.SSF.parse_date_code(v);
+      if (!d) return String(v);
+      const dt = new Date(Date.UTC(d.y, d.m - 1, d.d));
+      return dt.toISOString().slice(0,10);
+    }
+    const dt = new Date(v);
+    return isNaN(dt) ? String(v) : dt.toISOString().slice(0,10);
+  };
+
+  async function tryAutoLoad() {
+    try {
+      const res = await fetch('./ITO.xlsx', { cache: 'no-store' });
+      if (!res.ok) return;
+      const ab = await res.arrayBuffer();
+      loadWorkbook(ab);
+    } catch (_) {}
+  }
+  document.getElementById('file').addEventListener('change', async (e) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    const ab = await f.arrayBuffer();
+    loadWorkbook(ab);
+  });
+  document.getElementById('reload').addEventListener('click', tryAutoLoad);
+
+  function mapHeaders(ws) {
+    const range = XLSX.utils.decode_range(ws['!ref']);
+    const target = ['발주일','발주번호','공급처','내용','발주금액','FROM','TO'];
+    const map = {};
+    for (let c = range.s.c; c <= range.e.c; c++) {
+      const addr = XLSX.utils.encode_cell({ r: 0, c });
+      const cell = ws[addr];
+      const val = (cell && cell.v != null) ? String(cell.v).trim() : '';
+      const hit = target.find(t => t === val);
+      if (hit) map[hit] = c;
+    }
+    const missing = target.filter(t => !(t in map));
+    if (missing.length) throw new Error(`'25년' 시트 1행에서 다음 헤더를 찾지 못했습니다: ${missing.join(', ')}`);
+    return map;
+  }
+
+  function loadWorkbook(arrayBuffer) {
+    const wb = XLSX.read(arrayBuffer, { type: 'array', cellFormula: true, cellNF: true, cellDates: true });
+    STATE.wb = wb;
+
+    const sheet25 = wb.Sheets['25년'];
+    if (!sheet25) { alert("워크북에 '25년' 시트를 찾지 못했습니다."); return; }
+
+    try {
+      STATE.headerMap = mapHeaders(sheet25);
+    } catch (err) {
+      alert(err.message);
+      return;
+    }
+
+    const range = XLSX.utils.decode_range(sheet25['!ref']);
+    const rows = [];
+    for (let r = 1; r <= range.e.r; r++) {
+      const rowObj = {};
+      for (const key of Object.keys(STATE.headerMap)) {
+        const c = STATE.headerMap[key];
+        const cell = sheet25[XLSX.utils.encode_cell({ r, c })];
+        rowObj[key] = cell?.v ?? '';
+      }
+      if (!rowObj['발주번호'] || String(rowObj['발주번호']).trim() === '') continue;
+      rows.push(rowObj);
+    }
+    STATE.rows = rows;
+    renderTable(rows);
+  }
+
+  function renderTable(data) {
+    const tbody = document.querySelector('#grid tbody');
+    tbody.innerHTML = '';
+    data.forEach((row) => {
+      const tr = document.createElement('tr');
+
+      const tdBtn = document.createElement('td');
+      tdBtn.className = 'leftcol';
+      const btn = document.createElement('button');
+      btn.className = 'pdfbtn';
+      btn.textContent = 'PDF';
+      btn.title = '발주서 시트를 PDF로 다운로드';
+      btn.addEventListener('click', () => generateOrderPDF(String(row['발주번호']).trim(), row));
+      tdBtn.appendChild(btn);
+      tr.appendChild(tdBtn);
+
+      const td1 = document.createElement('td'); td1.textContent = fmtDate(row['발주일']); tr.appendChild(td1);
+      const td2 = document.createElement('td'); td2.textContent = String(row['발주번호']); tr.appendChild(td2);
+      const td3 = document.createElement('td'); td3.textContent = String(row['공급처'] ?? ''); tr.appendChild(td3);
+      const td4 = document.createElement('td'); td4.textContent = String(row['내용'] ?? ''); tr.appendChild(td4);
+      const td5 = document.createElement('td'); td5.className='money'; td5.textContent = fmtMoney(row['발주금액']); tr.appendChild(td5);
+      const td6 = document.createElement('td'); td6.textContent = fmtDate(row['FROM']); tr.appendChild(td6);
+      const td7 = document.createElement('td'); td7.textContent = fmtDate(row['TO']); tr.appendChild(td7);
+
+      tbody.appendChild(tr);
+    });
+  }
+
+  document.getElementById('search').addEventListener('input', (e) => {
+    const q = e.target.value.trim().toLowerCase();
+    if (!q) { renderTable(STATE.rows); return; }
+    const out = STATE.rows.filter(row =>
+      ['발주일','발주번호','공급처','내용','발주금액','FROM','TO'].some(k => String(row[k] ?? '').toLowerCase().includes(q))
+    );
+    renderTable(out);
+  });
+
+  function generateOrderPDF(poNumber, rowFrom25) {
+    if (!STATE.wb) { alert('워크북이 아직 로드되지 않았습니다.'); return; }
+    const wbClone = deepCloneWB(STATE.wb);
+
+    const wsOrder = wbClone.Sheets['발주서'];
+    if (!wsOrder) { 
+      console.warn("워크북에 '발주서' 시트를 찾지 못했습니다. 폴백 템플릿을 사용합니다.");
+      return renderFallbackAndSave(poNumber, rowFrom25);
+    }
+
+    try {
+      // 발주서!C7 = 선택 발주번호(엑셀 수식 기반 시나리오)
+      const C7 = XLSX.utils.encode_cell({ r: 6, c: 2 }); // C7
+      wsOrder[C7] = wsOrder[C7] || {};
+      wsOrder[C7].t = 's';
+      wsOrder[C7].v = String(poNumber);
+      delete wsOrder[C7].f;
+
+      // 수식 재계산 (지원 안 되는 함수가 있으면 예외 발생 가능)
+      if (typeof XLSX_CALC === 'function') {
+        XLSX_CALC(wbClone, { continue_after_error: true });
+      } else {
+        throw new Error('XLSX_CALC is not defined');
+      }
+
+      // 재계산 후 HTML로
+      const html = XLSX.utils.sheet_to_html(wsOrder, { editable: false, header: '', footer: '' });
+      if (!html || !/\<table/i.test(html)) throw new Error('sheet_to_html 결과가 비었습니다.');
+
+      // 페이지 분할 힌트 (엑셀 L44 / L109 대응은 정확 매칭이 어려워 가이드용 분할)
+      const printArea = document.getElementById('printArea');
+      printArea.innerHTML = sanitizeHTML(html);
+      tryInsertPageBreaks(printArea);
+
+      // A4 PDF로 저장
+      const opt = {
+        margin: [10,10,10,10],
+        filename: `발주서_${poNumber}.pdf`,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+        pagebreak: { mode: ['css', 'legacy'] }
+      };
+      html2pdf().set(opt).from(printArea).save();
+    } catch (e) {
+      console.warn('엑셀 수식 재계산/변환 실패. 폴백 템플릿으로 전환:', e);
+      renderFallbackAndSave(poNumber, rowFrom25);
+    }
+  }
+
+  function tryInsertPageBreaks(rootEl){
+    try{
+      const table = rootEl.querySelector('table');
+      const tbody = table?.querySelector('tbody') || table;
+      const trs = Array.from(tbody?.querySelectorAll('tr') || []);
+      const insertBreakBefore = (idx) => {
+        if (!trs[idx]) return;
+        const br = document.createElement('tr');
+        const td = document.createElement('td');
+        td.colSpan = 1000;
+        td.innerHTML = '<div style="page-break-before:always;"></div>';
+        br.appendChild(td);
+        trs[idx].before(br);
+      };
+      insertBreakBefore(44);  // 엑셀의 45행 전
+      insertBreakBefore(109); // 엑셀의 110행 전
+    }catch(_){}
+  }
+
+  function renderFallbackAndSave(poNumber, row25){
+    const printArea = document.getElementById('printArea');
+    const from = fmtDate(row25['FROM']);
+    const to = fmtDate(row25['TO']);
+    const html = `
+      <div class="sheet">
+        <h2>발주서 (폴백)</h2>
+        <div class="kv">
+          <div class="k">발주번호</div><div>${escapeHtml(poNumber)}</div>
+          <div class="k">발주일자</div><div>${escapeHtml(fmtDate(row25['발주일']))}</div>
+          <div class="k">공급처</div><div>${escapeHtml(String(row25['공급처']||''))}</div>
+          <div class="k">계약기간</div><div>${from && to ? escapeHtml(from+' ~ '+to) : ''}</div>
+        </div>
+
+        <table class="tbl">
+          <thead>
+            <tr><th style="width:40px">No</th><th>품명/내용</th><th style="width:100px">금액</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style="text-align:center">1</td>
+              <td>${escapeHtml(String(row25['내용']||''))}</td>
+              <td style="text-align:right">${escapeHtml(fmtMoney(row25['발주금액']))}</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="tot">합계금액: ${escapeHtml(fmtMoney(row25['발주금액']))}</div>
+        <div class="muted2">* 수식 엔진 미호환 시 폴백 템플릿으로 출력되었습니다.</div>
+      </div>
+    `;
+    printArea.innerHTML = html;
+
+    const opt = {
+      margin: [10,10,10,10],
+      filename: `발주서_${poNumber}.pdf`,
+      image: { type: 'jpeg', quality: 0.98 },
+      html2canvas: { scale: 2, useCORS: true },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+    };
+    html2pdf().set(opt).from(printArea).save();
+  }
+
+  function deepCloneWB(wb){
+    const out = {
+      SheetNames: wb.SheetNames.slice(),
+      Sheets: {},
+      Props: wb.Props ? { ...wb.Props } : undefined,
+      Custprops: wb.Custprops ? { ...wb.Custprops } : undefined,
+      Workbook: wb.Workbook ? JSON.parse(JSON.stringify(wb.Workbook)) : undefined,
+      vbaraw: wb.vbaraw ? wb.vbaraw.slice() : undefined
+    };
+    for (const name of wb.SheetNames) {
+      out.Sheets[name] = cloneSheet(wb.Sheets[name]);
+    }
+    return out;
+  }
+  function cloneSheet(ws){
+    const nws = {};
+    for (const k in ws) {
+      if (!Object.prototype.hasOwnProperty.call(ws, k)) continue;
+      const v = ws[k];
+      if (k[0] === '!') {
+        if (k === '!merges' || k === '!cols' || k === '!rows' || k === '!protect') {
+          nws[k] = JSON.parse(JSON.stringify(v));
+        } else {
+          nws[k] = v;
+        }
+      } else {
+        nws[k] = { ...v };
+      }
+    }
+    return nws;
+  }
+  function sanitizeHTML(s){
+    return String(s)
+      .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, '')
+      .replace(/\son\w+="[^"]*"/g, '');
+  }
+  function escapeHtml(s){
+    return String(s ?? '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+  }
+
+  tryAutoLoad();
+})();
+</script>
+</body>
+</html>
