@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ITO 발주서 PDF 출력</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<style>
+:root{
+  --bg:#0f172a;--panel:#1e293b;--ink:#e2e8f0;--muted:#94a3b8;
+  --accent:#3b82f6;--border:#334155;--paper:#fff;--ink2:#1e293b;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans KR",sans-serif;background:var(--bg);color:var(--ink);min-height:100vh}
+
+header{background:var(--panel);border-bottom:1px solid var(--border);padding:20px;position:sticky;top:0;z-index:100}
+.header-content{max-width:1200px;margin:0 auto;display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+.btn{padding:10px 18px;border-radius:8px;border:none;cursor:pointer;font-size:14px;font-weight:500;transition:all .2s}
+.btn-primary{background:var(--accent);color:#fff}
+.btn-primary:hover{background:#2563eb}
+.btn-success{background:#10b981;color:#fff}
+.btn-success:hover{background:#059669}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.file-input{padding:8px 14px;border:1px solid var(--border);border-radius:8px;background:#0f172a;color:var(--ink);font-size:14px}
+.select{padding:8px 14px;border:1px solid var(--border);border-radius:8px;background:#0f172a;color:var(--ink);font-size:14px;min-width:200px}
+
+main{max-width:1200px;margin:20px auto;padding:0 20px}
+.controls{background:var(--panel);padding:20px;border-radius:12px;margin-bottom:20px;border:1px solid var(--border)}
+.control-row{display:flex;gap:12px;align-items:center;margin-bottom:12px}
+.control-row:last-child{margin-bottom:0}
+.label{font-size:14px;color:var(--muted);min-width:100px}
+.hint{font-size:12px;color:var(--muted);margin-top:8px}
+
+.paper-container{background:var(--panel);padding:20px;border-radius:12px;border:1px solid var(--border)}
+.paper{width:210mm;min-height:297mm;background:var(--paper);color:var(--ink2);margin:0 auto;padding:20mm;position:relative;box-shadow:0 4px 20px rgba(0,0,0,.3)}
+
+.po-header{text-align:center;margin-bottom:25mm;position:relative}
+.po-title{font-size:28px;font-weight:800;letter-spacing:3px;margin-bottom:8px}
+.po-subtitle{font-size:14px;color:#6b7280}
+.logo{position:absolute;right:0;top:0;width:60px;height:60px;opacity:.2}
+
+.info-section{margin-bottom:15mm}
+.info-row{display:flex;gap:10px;margin-bottom:6px}
+.info-label{font-size:13px;color:#374151;font-weight:600;min-width:80px}
+.info-value{flex:1;padding:6px 10px;border:1px solid #d1d5db;border-radius:4px;font-size:13px}
+
+.table-section{margin:15mm 0}
+.section-title{font-size:15px;font-weight:700;margin-bottom:8px;color:#111827}
+table{width:100%;border-collapse:collapse;margin-bottom:10mm}
+th,td{border:1px solid #d1d5db;padding:8px;font-size:13px}
+th{background:#f9fafb;font-weight:600;text-align:center}
+.text-right{text-align:right}
+.text-center{text-align:center}
+
+.summary-table{width:60%;margin-left:auto}
+.footer-section{margin-top:20mm;display:grid;grid-template-columns:1fr 1fr;gap:20px}
+.footer-box{border:1px solid #d1d5db;padding:15px;border-radius:6px}
+.footer-title{font-weight:700;margin-bottom:10px;font-size:14px}
+.footer-content{font-size:12px;line-height:1.6;color:#4b5563}
+
+@media print{
+  body{background:#fff}
+  header,.controls{display:none}
+  .paper-container{background:none;padding:0;border:none}
+  .paper{box-shadow:none;margin:0;page-break-after:always}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-content">
+    <strong style="font-size:18px">📄 ITO 발주서 생성기</strong>
+    <input type="file" id="fileInput" accept=".xlsx,.xls" class="file-input">
+    <button id="fillBtn" class="btn btn-primary" disabled>📋 시트에서 채우기</button>
+    <button id="pdfBtn" class="btn btn-success" disabled>💾 PDF 다운로드</button>
+  </div>
+</header>
+
+<main>
+  <div class="controls">
+    <div class="control-row">
+      <span class="label">발주번호 선택:</span>
+      <select id="poSelect" class="select" disabled>
+        <option value="">파일을 먼저 선택하세요</option>
+      </select>
+    </div>
+    <div class="hint">※ ITO.xlsx 파일을 선택하면 '25년' 시트의 발주번호 목록이 자동으로 표시됩니다.</div>
+  </div>
+
+  <div class="paper-container">
+    <div class="paper" id="printArea">
+      <div class="logo">🏢</div>
+      
+      <div class="po-header">
+        <div class="po-title">발 주 서</div>
+        <div class="po-subtitle">PURCHASE ORDER</div>
+      </div>
+
+      <div class="info-section">
+        <div class="info-row">
+          <div class="info-label">발주번호</div>
+          <div class="info-value" id="poNumber">-</div>
+          <div class="info-label">발주일자</div>
+          <div class="info-value" id="poDate">-</div>
+        </div>
+        <div class="info-row">
+          <div class="info-label">공급처</div>
+          <div class="info-value" id="supplier">㈜아이티오</div>
+        </div>
+      </div>
+
+      <div class="table-section">
+        <div class="section-title">■ 발주 내역</div>
+        <table>
+          <thead>
+            <tr>
+              <th style="width:60px">No</th>
+              <th style="width:80px">발주번호</th>
+              <th>내용</th>
+              <th style="width:80px">수량</th>
+              <th style="width:60px">단위</th>
+              <th style="width:100px">단가(원)</th>
+              <th style="width:120px">금액(원)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="text-center">1</td>
+              <td class="text-center" id="itemPoNo">-</td>
+              <td id="itemContent">-</td>
+              <td class="text-right" id="itemQty">-</td>
+              <td class="text-center" id="itemUnit">-</td>
+              <td class="text-right" id="itemPrice">-</td>
+              <td class="text-right" id="itemAmount">-</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <table class="summary-table">
+        <tr>
+          <th style="width:100px">공급가액</th>
+          <td class="text-right" id="supplyAmount">0</td>
+        </tr>
+        <tr>
+          <th>부가세(10%)</th>
+          <td class="text-right" id="taxAmount">0</td>
+        </tr>
+        <tr>
+          <th>합계금액</th>
+          <td class="text-right" id="totalAmount" style="font-weight:700">0</td>
+        </tr>
+      </table>
+
+      <div class="info-section" style="margin-top:15mm">
+        <div class="section-title">■ 기간 정보</div>
+        <div class="info-row">
+          <div class="info-label">계약시작(FROM)</div>
+          <div class="info-value" id="fromDate">-</div>
+          <div class="info-label">계약종료(TO)</div>
+          <div class="info-value" id="toDate">-</div>
+        </div>
+        <div class="info-row">
+          <div class="info-label">계약기간</div>
+          <div class="info-value" id="period">-</div>
+        </div>
+      </div>
+
+      <div class="footer-section">
+        <div class="footer-box">
+          <div class="footer-title">검수 기준</div>
+          <div class="footer-content">
+            1. 제품의 품질 및 사양 적합성 확인<br>
+            2. 수량 및 포장 상태 점검<br>
+            3. 납기일 준수 여부 확인
+          </div>
+        </div>
+        <div class="footer-box">
+          <div class="footer-title">특이 사항</div>
+          <div class="footer-content">
+            • 본 발주서에 기재된 내용대로 공급해 주시기 바랍니다.<br>
+            • 문의사항이 있으시면 담당자에게 연락 바랍니다.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script>
+let workbook = null;
+let sheetData = null;
+
+const fileInput = document.getElementById('fileInput');
+const poSelect = document.getElementById('poSelect');
+const fillBtn = document.getElementById('fillBtn');
+const pdfBtn = document.getElementById('pdfBtn');
+
+fileInput.addEventListener('change', handleFile);
+fillBtn.addEventListener('click', fillData);
+pdfBtn.addEventListener('click', generatePDF);
+
+function handleFile(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      workbook = XLSX.read(e.target.result, {type: 'binary'});
+      
+      let targetSheet = workbook.Sheets['25년'] || workbook.Sheets[workbook.SheetNames[0]];
+      sheetData = XLSX.utils.sheet_to_json(targetSheet, {header: 1, defval: ''});
+      
+      if (sheetData.length === 0) {
+        alert('시트에 데이터가 없습니다.');
+        return;
+      }
+      
+      const headers = sheetData[0];
+      const poColIdx = headers.findIndex(h => h === '발주번호');
+      
+      if (poColIdx === -1) {
+        alert('"발주번호" 열을 찾을 수 없습니다.');
+        return;
+      }
+      
+      const poNumbers = [];
+      for (let i = 1; i < sheetData.length; i++) {
+        const poNum = sheetData[i][poColIdx];
+        if (poNum) poNumbers.push(poNum);
+      }
+      
+      poSelect.innerHTML = '<option value="">발주번호를 선택하세요</option>';
+      poNumbers.forEach(po => {
+        const opt = document.createElement('option');
+        opt.value = po;
+        opt.textContent = po;
+        poSelect.appendChild(opt);
+      });
+      
+      poSelect.disabled = false;
+      fillBtn.disabled = false;
+      pdfBtn.disabled = false;
+      
+    } catch (err) {
+      alert('파일 읽기 오류: ' + err.message);
+    }
+  };
+  reader.readAsBinaryString(file);
+}
+
+function fillData() {
+  const selectedPO = poSelect.value;
+  if (!selectedPO || !sheetData) return;
+  
+  const headers = sheetData[0];
+  const getColIdx = (name) => headers.findIndex(h => h === name);
+  
+  const poColIdx = getColIdx('발주번호');
+  const rowIdx = sheetData.findIndex((row, idx) => idx > 0 && row[poColIdx] === selectedPO);
+  
+  if (rowIdx === -1) {
+    alert('해당 발주번호를 찾을 수 없습니다.');
+    return;
+  }
+  
+  const row = sheetData[rowIdx];
+  const getValue = (colName, defaultVal = '-') => {
+    const idx = getColIdx(colName);
+    return idx !== -1 && row[idx] ? row[idx] : defaultVal;
+  };
+  
+  document.getElementById('poNumber').textContent = selectedPO;
+  document.getElementById('poDate').textContent = formatDate(getValue('발주일자'));
+  document.getElementById('itemPoNo').textContent = selectedPO;
+  document.getElementById('itemContent').textContent = getValue('내용', '클라우드 서비스 운영 및 유지보수');
+  
+  const qty = parseFloat(getValue('수량', 12)) || 12;
+  const unit = getValue('단위', '개월');
+  const price = parseFloat(getValue('단가', 10920000)) || 10920000;
+  const amount = parseFloat(getValue('발주금액', qty * price)) || (qty * price);
+  
+  document.getElementById('itemQty').textContent = formatNumber(qty);
+  document.getElementById('itemUnit').textContent = unit;
+  document.getElementById('itemPrice').textContent = formatNumber(price);
+  document.getElementById('itemAmount').textContent = formatNumber(amount);
+  
+  const supplyAmt = Math.round(amount);
+  const taxAmt = Math.round(supplyAmt * 0.1);
+  const totalAmt = supplyAmt + taxAmt;
+  
+  document.getElementById('supplyAmount').textContent = formatNumber(supplyAmt);
+  document.getElementById('taxAmount').textContent = formatNumber(taxAmt);
+  document.getElementById('totalAmount').textContent = formatNumber(totalAmt);
+  
+  const fromDate = getValue('FROM');
+  const toDate = getValue('TO');
+  document.getElementById('fromDate').textContent = formatDate(fromDate);
+  document.getElementById('toDate').textContent = formatDate(toDate);
+  
+  if (fromDate && toDate && fromDate !== '-' && toDate !== '-') {
+    const from = parseExcelDate(fromDate);
+    const to = parseExcelDate(toDate);
+    if (from && to) {
+      const months = Math.round((to - from) / (1000 * 60 * 60 * 24 * 30));
+      document.getElementById('period').textContent = months + ' 개월';
+    }
+  } else {
+    document.getElementById('period').textContent = '-';
+  }
+  
+  document.getElementById('supplier').textContent = getValue('공급처', '㈜아이티오');
+}
+
+function parseExcelDate(val) {
+  if (typeof val === 'number') {
+    return new Date((val - 25569) * 86400 * 1000);
+  }
+  if (typeof val === 'string' && val.includes('-')) {
+    return new Date(val);
+  }
+  return null;
+}
+
+function formatDate(val) {
+  if (!val || val === '-') return '-';
+  const d = parseExcelDate(val);
+  if (!d) return val;
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function formatNumber(num) {
+  if (isNaN(num)) return '-';
+  return new Intl.NumberFormat('ko-KR').format(num);
+}
+
+function generatePDF() {
+  const element = document.getElementById('printArea');
+  const opt = {
+    margin: 0,
+    filename: `발주서_${document.getElementById('poNumber').textContent || 'ITO'}.pdf`,
+    image: { type: 'jpeg', quality: 0.98 },
+    html2canvas: { scale: 2, useCORS: true },
+    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+  };
+  
+  html2pdf().set(opt).from(element).save();
+}
+</script>
+
+</body>
+</html>

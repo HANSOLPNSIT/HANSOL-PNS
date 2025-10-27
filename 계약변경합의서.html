@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>계약변경합의서 생성기 (A4 고정)</title>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html-docx-js/0.4.1/html-docx.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+
+<style>
+  :root{ --ink:#0f172a; --muted:#475569; --line:#cbd5e1; --bg:#f6f7fb; --card:#ffffff; --brand:#2563eb; }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,Segoe UI,Roboto,"Apple SD Gothic Neo","Noto Sans KR",sans-serif}
+  header{padding:14px 18px;border-bottom:1px solid var(--line);background:#fff;position:sticky;top:0;z-index:10}
+  header h1{margin:0;font-size:18px}
+  main{display:grid;grid-template-columns:380px 1fr;gap:18px;padding:18px}
+  @media(max-width:1160px){main{grid-template-columns:1fr}}
+  .panel{background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  .panel h2{margin:0;padding:12px 14px;border-bottom:1px solid var(--line);font-size:15px}
+  .panel .body{padding:12px 14px}
+  label{display:block;font-size:12px;color:var(--muted);margin:10px 0 6px}
+  input[type="text"], input[type="date"], textarea{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:#fff;font-size:14px}
+  textarea{min-height:82px;resize:vertical}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .btn{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);background:#fff;padding:10px 14px;border-radius:10px;cursor:pointer}
+  .btn.primary{background:var(--brand);border-color:var(--brand);color:#fff}
+  .btns{display:flex;flex-wrap:wrap;gap:10px}
+  .small{font-size:12px;color:var(--muted)}
+  .section-title{font-weight:700;margin:6px 0}
+  .w100{width:100%}
+  .table-controls{display:flex;gap:8px;margin:8px 0}
+
+  /* ===== A4 레이아웃 ===== */
+  .doc-wrap{padding:8px}
+
+  /* 화면에서는 정확히 794×1123px (= A4 @96dpi)로 고정 */
+  @media screen{
+    .a4{ width:794px; min-height:1123px; background:#fff; color:#111; margin:0 auto; border:1px solid var(--line);
+         box-shadow:0 10px 24px rgba(2,6,23,.08); position:relative; }
+    .a4 .inner{ padding:68px; } /* 약 18mm */
+  }
+
+  /* 인쇄/변환 기준은 A4 mm 규격 */
+  @page{ size:A4; margin:18mm; }
+  @media print{
+    header, main > .panel:first-child{ display:none !important; }
+    .a4{ box-shadow:none; border:0; width:auto; min-height:auto }
+    .a4 .inner{ padding:0 }
+  }
+
+  /* 문서 요소 */
+  .doc-title{font-weight:800;font-size:20px;margin:0 0 10px}
+  .muted{color:#6b7280}
+  .tb{width:100%;border-collapse:collapse;margin:10px 0 14px}
+  .tb th,.tb td{border:1px solid #000; padding:8px 10px; vertical-align:top; font-size:13px}
+  .tb th{background:#f1f5f9; font-weight:600}
+  .right{text-align:right}
+  .sign{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:20px}
+  .sign .box{border:1px solid #000;padding:10px 12px}
+  .stamp{display:inline-block;border:1px solid #000;border-radius:4px;padding:0 6px;margin-left:6px;font-size:12px}
+</style>
+</head>
+<body>
+<header><h1>계약변경합의서 생성기 · A4 고정 · Word/PDF 내보내기</h1></header>
+
+<main>
+  <!-- 입력 -->
+  <section class="panel">
+    <h2>입력값</h2>
+    <div class="body">
+      <label>발주사</label><input id="buyerName" value="한솔PNS IT부문"/>
+      <label>계약명</label><input id="contractName" placeholder="예: ITO 유지보수…"/>
+      <div class="row">
+        <div><label>계약기간(시작)</label><input type="date" id="periodStart"/></div>
+        <div><label>계약기간(종료)</label><input type="date" id="periodEnd"/></div>
+      </div>
+      <label>프로젝트 개요</label><textarea id="projectSummary"></textarea>
+      <label>계약금액 (₩, 콤마/원 허용)</label><input id="amount" placeholder="₩108,000,000원"/>
+
+      <div class="section-title">계약변경 합의 내용</div>
+      <div class="table-controls">
+        <button class="btn" id="addRow">+ 행 추가</button>
+        <button class="btn" id="clearRows">모든 행 삭제</button>
+      </div>
+      <table class="tb" id="changeTableInput">
+        <thead><tr><th style="width:20%">구분</th><th style="width:40%">변경 전</th><th style="width:40%">변경 후</th></tr></thead>
+        <tbody></tbody>
+      </table>
+
+      <div class="row"><div><label>문서 날짜</label><input type="date" id="docDate"/></div></div>
+
+      <hr style="margin:12px 0">
+
+      <div class="section-title">발주사 표시 정보</div>
+      <label>발주사 명칭</label><input id="buyerDisplay" value="한솔PNS IT부문"/>
+      <label>발주사 주소</label><input id="buyerAddr" value="서울시 강서구 양천로 570 NH서울타워, 6층"/>
+      <div class="row">
+        <div><label>발주사 대표이사</label><input id="buyerCeo" value="김 형 준"/></div>
+        <div><label>(인) 표기</label><input value="(인)" disabled/></div>
+      </div>
+
+      <hr style="margin:12px 0">
+
+      <div class="section-title">공급사 표시 정보</div>
+      <label>공급사 명칭</label><input id="suppName"/>
+      <label>공급사 주소</label><input id="suppAddr"/>
+      <label>기타 정보</label><input id="suppEtc"/>
+      <div class="row">
+        <div><label>공급사 대표이사</label><input id="suppCeo"/></div>
+        <div><label>(인) 표기</label><input value="(인)" disabled/></div>
+      </div>
+
+      <hr style="margin:12px 0">
+      <div class="btns">
+        <button class="btn" onclick="updatePreview()">미리보기 갱신</button>
+        <button class="btn primary" onclick="downloadDocx()">Word(.docx) 다운로드</button>
+        <button class="btn" onclick="downloadPDF()">PDF 다운로드</button>
+      </div>
+      <div class="small">* 금액은 자유 입력 → 문서에는 “₩ 108,000,000원, VAT 제외”.</div>
+    </div>
+  </section>
+
+  <!-- 미리보기(A4 실제 출력 영역) -->
+  <section class="panel">
+    <h2>미리보기 (A4)</h2>
+    <div class="doc-wrap">
+      <div class="a4" id="printArea">
+        <div class="inner" id="docInner"></div>
+      </div>
+    </div>
+    <div class="body small">* 이 A4 화면이 그대로 PDF/Word로 저장됩니다.</div>
+  </section>
+</main>
+
+<script>
+  // 기본 날짜
+  function toISODate(d){ return d.toISOString().slice(0,10); }
+  const today=new Date();
+  docDate.value=toISODate(today);
+  periodStart.value=toISODate(new Date(today.getFullYear(),0,1));
+  periodEnd.value=toISODate(new Date(today.getFullYear(),11,31));
+
+  // 행 추가/삭제
+  const tBody=document.querySelector('#changeTableInput tbody');
+  function addRow(g='',b='',a=''){
+    const tr=document.createElement('tr');
+    tr.innerHTML=`
+      <td><input class="w100" value="${g}"></td>
+      <td><textarea class="w100" style="min-height:60px">${b}</textarea></td>
+      <td>
+        <div style="display:flex;gap:6px;align-items:flex-start">
+          <textarea class="w100" style="min-height:60px">${a}</textarea>
+          <button class="btn" onclick="this.closest('tr').remove()">삭제</button>
+        </div>
+      </td>`;
+    tBody.appendChild(tr);
+  }
+  addRow();
+  document.getElementById('addRow').onclick=()=>addRow();
+  document.getElementById('clearRows').onclick=()=>tBody.innerHTML='';
+
+  // 금액
+  amount.addEventListener('input',()=>{ const r=toNum(amount.value); if(!isNaN(r)) amount.dataset.raw=String(r); });
+  function toNum(v){ const n=String(v||'').replace(/[^\d]/g,''); return n?parseInt(n,10):NaN; }
+  function fmtKRW(n){ return `₩ ${n.toLocaleString('ko-KR')}원`; }
+
+  // 렌더
+  function updatePreview(){
+    const buyerName = buyerNameEl().trim()||'발주사';
+    const contractNameV = contractName.value.trim();
+    const pS=periodStart.value, pE=periodEnd.value;
+    const proj=projectSummary.value.trim();
+    const raw=toNum(amount.value);
+    const amtTxt=isNaN(raw)?'':`${fmtKRW(raw)}, VAT 제외`;
+    const dateStr=docDate.value;
+
+    const html=`
+      <div class="doc-title"><span class="muted">XXX</span> 유지보수 계약 변경 합의서</div>
+      <table class="tb">
+        <tr>
+          <th style="width:16%">발주사</th><td style="width:34%">${esc(buyerName)}</td>
+          <th style="width:16%">계약기간</th><td style="width:34%">${esc(rangeFmt(pS,pE))}</td>
+        </tr>
+        <tr><th>계약명</th><td colspan="3">${esc(contractNameV||' ')}</td></tr>
+        <tr><th>프로젝트개요</th><td colspan="3">${esc(proj).replace(/\n/g,'<br>')}</td></tr>
+        <tr><th>계약 금액</th><td colspan="3">${amtTxt||'&nbsp;'}</td></tr>
+      </table>
+
+      <div style="font-weight:700;margin:6px 0">2. 계약변경 합의 내용</div>
+      <table class="tb">
+        <tr><th style="width:20%">구분</th><th style="width:40%">변경 전</th><th style="width:40%">변경 후</th></tr>
+        ${rowsHTML()}
+      </table>
+
+      <div class="right" style="margin-top:8px">${korDate(dateStr)}</div>
+
+      <div class="sign">
+        <div class="box">
+          <div style="font-weight:700;margin-bottom:6px">(발주사)</div>
+          <div>${esc(buyerDisplay.value)}</div>
+          <div>${esc(buyerAddr.value)}</div>
+          <div>대표이사&nbsp;&nbsp;${esc(buyerCeo.value)} <span class="stamp">(인)</span></div>
+        </div>
+        <div class="box">
+          <div style="font-weight:700;margin-bottom:6px">(공급사)</div>
+          <div>${esc(suppName.value)}</div>
+          <div>${esc(suppAddr.value)}</div>
+          <div>${esc(suppEtc.value)}</div>
+          <div>대표이사&nbsp;&nbsp;${esc(suppCeo.value)} <span class="stamp">(인)</span></div>
+        </div>
+      </div>`;
+    docInner.innerHTML=html;
+  }
+  function buyerNameEl(){ return document.getElementById('buyerName').value; }
+  function esc(s){ return String(s||'').replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[m])); }
+  function rangeFmt(s,e){ if(!s&&!e) return ''; const p=[]; if(s)p.push(fmtYM(s)); if(e)p.push(fmtYM(e)); return p.join(' ~ '); }
+  function fmtYM(d){ const dt=new Date(d); return `${dt.getFullYear()}.${dt.getMonth()+1}`; }
+  function korDate(d){ if(!d) return ''; const dt=new Date(d); return `${dt.getFullYear()}년 ${String(dt.getMonth()+1).padStart(2,'0')}월 ${String(dt.getDate()).padStart(2,'0')}일`; }
+  function rowsHTML(){
+    const rows=[...tBody.querySelectorAll('tr')].map(tr=>{
+      const g=tr.querySelector('td:nth-child(1) input').value.trim();
+      const b=tr.querySelector('td:nth-child(2) textarea').value.trim();
+      const a=tr.querySelector('td:nth-child(3) textarea').value.trim();
+      return (g||b||a)?`<tr><td>${esc(g)}</td><td>${esc(b).replace(/\n/g,'<br>')}</td><td>${esc(a).replace(/\n/g,'<br>')}</td></tr>`:'';
+    }).join('');
+    return rows || `<tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>`;
+  }
+
+  // Word(.docx)
+  function downloadDocx(){
+    updatePreview();
+    const content = document.getElementById('docInner').innerHTML;
+    const wordStyles = `
+      <style>
+        body{font-family:"Malgun Gothic", Arial; color:#111}
+        .doc-title{font-weight:800;font-size:20px;margin:0 0 10px}
+        .tb{width:100%;border-collapse:collapse;margin:10px 0 14px}
+        .tb th,.tb td{border:1px solid #000; padding:8px 10px; vertical-align:top; font-size:12pt}
+        .tb th{background:#f1f5f9; font-weight:700}
+        .right{text-align:right}
+        .sign{width:100%; display:flex; gap:18px; margin-top:20px}
+        .sign .box{flex:1; border:1px solid #000; padding:10px 12px}
+        .stamp{display:inline-block;border:1px solid #000;border-radius:4px;padding:0 6px;margin-left:6px}
+      </style>`;
+    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">${wordStyles}</head><body>${content}</body></html>`;
+    const blob = window.htmlDocx.asBlob(html,{orientation:'portrait',margins:{top:1440,right:1440,bottom:1440,left:1440}});
+    saveAs(blob, fileName('계약변경합의서','docx'));
+  }
+
+  // PDF(A4 정확히 794×1123px 기준으로 캡처)
+  function downloadPDF(){
+    updatePreview();
+    const area = document.getElementById('printArea');
+
+    const opt = {
+      filename: fileName('계약변경합의서','pdf'),
+      margin: 0,
+      pagebreak: { mode: ['css','legacy'] },
+      html2canvas: {
+        scale: 2,
+        useCORS: true,
+        // 화면 기준 픽셀 폭/높이를 고정해 정확히 A4 비율로 캡처
+        windowWidth: 794,
+        windowHeight: 1123
+      },
+      // jsPDF도 픽셀 단위로 동일 크기 지정 → 결과가 정확히 A4 비율
+      jsPDF: { unit: 'px', format: [794,1123], orientation: 'portrait' }
+    };
+    html2pdf().set(opt).from(area).save();
+  }
+
+  function fileName(prefix,ext){
+    const dt = (docDate.value||toISODate(new Date())).replaceAll('-','');
+    const title = (contractName.value.trim()||'문서').replace(/[\\\/:*?"<>|]/g,'_');
+    return `${prefix}_${title}_${dt}.${ext}`;
+  }
+
+  // 초기 렌더
+  updatePreview();
+</script>
+</body>
+</html>
