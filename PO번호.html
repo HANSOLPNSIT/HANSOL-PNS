@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="ko" data-branch="">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>한솔PNS IT부문 구매팀 페이지</title>
+  <style>
+    :root{
+      --bg:#0f172a; --panel:#111827; --ink:#e5e7eb; --muted:#9ca3af; --brand:#60a5fa;
+    }
+    *{box-sizing:border-box}
+    body{margin:0; background:var(--bg); color:var(--ink);
+      font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Noto Sans,Ubuntu,Cantarell,Helvetica Neue,Arial}
+    .layout{display:grid; grid-template-columns:260px 1fr; min-height:100vh}
+    .sidebar{background:var(--panel); border-right:1px solid rgba(255,255,255,.06); padding:18px 14px}
+    h1{margin:0 0 12px; font-size:18px; font-weight:800}
+    .sub{color:var(--muted); font-size:12px; margin-bottom:14px}
+    .search{width:100%; padding:10px 12px; border-radius:10px; border:1px solid rgba(255,255,255,.08); background:#0b1220; color:var(--ink); margin-bottom:12px}
+    .nav{display:flex; flex-direction:column; gap:8px; margin-top:8px}
+    .nav a{text-decoration:none; color:var(--ink); font-size:14px; padding:10px 10px; border-radius:10px; border:1px solid transparent; display:flex; justify-content:space-between; align-items:center}
+    .nav a:hover{background:#0b1220; border-color:rgba(255,255,255,.08)}
+    .nav a.active{border-color:#ffffff33; background:#0b1220}
+    .tag{font-size:11px; color:var(--muted)}
+    .main{position:relative}
+    .viewer{position:absolute; inset:0; border:0; width:100%; height:100%; background:#0b1220}
+    .topbar{position:sticky; top:0; z-index:1; background:linear-gradient(0deg, rgba(15,23,42,0), rgba(15,23,42,.75)); padding:10px 14px; font-size:12px; color:var(--muted); display:flex; flex-wrap:wrap; gap:8px; align-items:center}
+    .crumb{white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%}
+    .pill{display:inline-flex; gap:6px; align-items:center; padding:4px 8px; border:1px solid rgba(255,255,255,.12); border-radius:999px; background:#0b1220; color:var(--ink); font-size:11px}
+    .pill b{color:#cfe1ff; font-weight:700}
+    .note{font-size:11px; color:var(--muted); margin-top:8px}
+    @media (max-width:900px){ .layout{grid-template-columns:1fr} .sidebar{position:sticky; top:0; z-index:2} }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <h1>한솔PNS IT부문 구매팀 페이지</h1>
+      <div class="sub">왼쪽에서 카테고리를 선택하면 오른쪽에 열립니다.</div>
+      <input id="q" class="search" placeholder="검색 (파일명)" />
+      <nav id="nav" class="nav"></nav>
+      <div class="note" id="note"></div>
+    </aside>
+
+    <main class="main">
+      <div class="topbar">
+        <span id="crumb" class="crumb"></span>
+        <!-- ▼ 새로 추가: PO생성일 · PO번호 표시 영역 -->
+        <span id="poMeta" class="pill" style="display:none;">
+          <span><b>PO생성일</b> <span id="poDateTxt"></span></span>
+          <span>· <b>PO번호</b> <span id="poNoTxt"></span></span>
+        </span>
+      </div>
+      <iframe id="viewer" class="viewer" src=""></iframe>
+    </main>
+  </div>
+
+  <script>
+    // ====== 설정 (필요시 수정) ======
+    const EXCLUDE = new Set(["index.html","404.html",".well-known"]); // 자동 제외
+    const CACHE_TTL_MS = 10 * 60 * 1000; // 10분 캐시
+    // =================================
+
+    const navEl  = document.getElementById('nav');
+    const viewer = document.getElementById('viewer');
+    const crumb  = document.getElementById('crumb');
+    const search = document.getElementById('q');
+    const note   = document.getElementById('note');
+
+    // PO 메타 UI
+    const poMeta     = document.getElementById('poMeta');
+    const poDateTxt  = document.getElementById('poDateTxt');
+    const poNoTxt    = document.getElementById('poNoTxt');
+
+    // 파일명 → 보기용 제목
+    const pretty = (name) => {
+      const base = name.replace(/\.(html?|HTML?)$/,'');
+      return base
+        .replace(/[-_]+/g,' ')
+        .replace(/\b([a-z])/g, m=>m.toUpperCase());
+    };
+
+    function detectRepoInfo(){
+      const host = location.host;
+      const path = location.pathname;
+      const user = host.split('.')[0];
+      const segs = path.split('/').filter(Boolean);
+      const repo = segs.length ? segs[0] : `${user}.github.io`;
+      return { user, repo };
+    }
+
+    async function fetchContents(user, repo, branchHint){
+      const candidates = [];
+      if (branchHint) candidates.push(branchHint);
+      candidates.push("gh-pages","main");
+      const tried = new Set();
+      for (const ref of candidates){
+        if (tried.has(ref)) continue;
+        tried.add(ref);
+        const url = `https://api.github.com/repos/${user}/${repo}/contents/?ref=${encodeURIComponent(ref)}`;
+        const res = await fetch(url, { headers: { 'Accept': 'application/vnd.github.v3+json' } });
+        if (res.ok){
+          const data = await res.json();
+          return { list: data, branch: ref };
+        }
+      }
+      throw new Error("목록을 가져올 수 없습니다. (gh-pages/main 모두 실패)");
+    }
+
+    function cacheGet(key){
+      try{
+        const raw = localStorage.getItem(key);
+        if (!raw) return null;
+        const obj = JSON.parse(raw);
+        if (Date.now() - obj.ts > CACHE_TTL_MS) return null;
+        return obj.data;
+      }catch(_){ return null; }
+    }
+    function cacheSet(key, data){
+      try{ localStorage.setItem(key, JSON.stringify({ ts: Date.now(), data })); }catch(_){}
+    }
+
+    function renderNav(pages, filter=""){
+      navEl.innerHTML = "";
+      const kw = filter.trim().toLowerCase();
+      const list = pages.filter(p => !kw || p.title.toLowerCase().includes(kw) || p.name.toLowerCase().includes(kw));
+      list.forEach(p => {
+        const a = document.createElement('a');
+        a.href = "#"+encodeURIComponent(p.name);
+        a.dataset.path = p.name;
+        a.innerHTML = `<span>${p.title}</span><span class="tag">${p.name}</span>`;
+        a.addEventListener('click', (e) => {
+          e.preventDefault();
+          openPage(p.name, p.title);
+          setActive(p.name);
+          history.replaceState(null, "", a.href);
+        });
+        navEl.appendChild(a);
+      });
+      const hashPath = decodeURIComponent(location.hash.slice(1)||"");
+      setActive(hashPath || (list[0]?.name||""));
+    }
+
+    function setActive(path){
+      [...navEl.querySelectorAll('a')].forEach(a => {
+        a.classList.toggle('active', a.dataset.path === path);
+      });
+    }
+
+    function setPoMeta({poDate, poNo} = {}){
+      const hasDate = !!(poDate && String(poDate).trim());
+      const hasNo   = !!(poNo   && String(poNo).trim());
+      if (!hasDate && !hasNo){
+        poMeta.style.display = "none";
+        poDateTxt.textContent = "";
+        poNoTxt.textContent = "";
+        return;
+      }
+      poDateTxt.textContent = hasDate ? String(poDate).trim() : "-";
+      poNoTxt.textContent   = hasNo   ? String(poNo).trim()   : "-";
+      poMeta.style.display = "inline-flex";
+    }
+
+    function openPage(path, title){
+      // 해시의 쿼리(?poDate=...&poNo=...)를 그대로 유지
+      const hashQuery = location.hash.includes("?") ? location.hash.split("?")[1] : "";
+      const src = hashQuery ? `${path}?${hashQuery}` : path;
+      viewer.src = src;
+      crumb.textContent = title ? `열람 중: ${title} (${path})` : path;
+      document.title = `한솔PNS IT부문 구매팀 페이지 · ${title||path}`;
+
+      // URL 쿼리로도 메타 표기 지원 (?poDate=YYYY-MM-DD&poNo=PO-12345)
+      if (hashQuery){
+        const sp = new URLSearchParams(hashQuery);
+        const poDate = sp.get("poDate");
+        const poNo   = sp.get("poNo");
+        setPoMeta({ poDate, poNo });
+      } else {
+        // 쿼리 없으면 초기화
+        setPoMeta({});
+      }
+    }
+
+    async function init(){
+      const branchHint = (document.documentElement.getAttribute('data-branch')||"").trim() || null;
+      const { user, repo } = detectRepoInfo();
+      const cacheKey = `gh_list_${user}_${repo}_${branchHint||'auto'}`;
+      let pages = cacheGet(cacheKey);
+      let branchUsed = null;
+
+      if (!pages){
+        try{
+          const { list, branch } = await fetchContents(user, repo, branchHint);
+          branchUsed = branch;
+          const files = list
+            .filter(it => it.type === "file")
+            .filter(it => /\.(html?|HTML?)$/.test(it.name))
+            .filter(it => ![...EXCLUDE].some(ex => it.name === ex || it.name.startsWith(ex)));
+          pages = files
+            .map(it => ({ name: it.name, title: pretty(it.name) }))
+            .sort((a,b) => a.title.localeCompare(b.title,'ko'));
+          cacheSet(cacheKey, pages);
+        }catch(err){
+          note.textContent = "자동 목록 로드 실패: " + err.message + " (캐시/수동 모드로 전환 가능)";
+          pages = [];
+        }
+      }
+
+      if (pages.length === 0){
+        note.textContent = (note.textContent? note.textContent+" · " : "") +
+          "루트에 .html 파일을 추가하면 자동으로 목록에 표시됩니다.";
+      }else{
+        note.textContent = `자동 로드됨 (브랜치: ${branchUsed || branchHint || "캐시"}) · 새 파일을 푸시하면 다음 새로고침에 반영됩니다.`;
+      }
+
+      renderNav(pages);
+      search.addEventListener('input', () => renderNav(pages, search.value));
+
+      const initial = decodeURIComponent(location.hash.slice(1)||"") || (pages[0]?.name);
+      if (initial){
+        const meta = pages.find(p=>p.name===initial) || pages[0];
+        openPage(meta.name, meta.title);
+        setActive(meta.name);
+        if(!location.hash) history.replaceState(null, "", "#"+encodeURIComponent(meta.name));
+      }
+    }
+
+    // 해시 변경 시 페이지 교체
+    window.addEventListener('hashchange', () => {
+      const hash = decodeURIComponent(location.hash.slice(1)||"");
+      if (!hash) return;
+      const [path, query] = hash.split("?");
+      if (!path) return;
+      openPage(path, pretty(path));
+      setActive(path);
+    });
+
+    // ▼ 자식 프레임(업체별조회.html 등)에서 메타 전송 받기
+    // window.parent.postMessage({ type: "PO_META", poDate: "2025-10-29", poNo: "PO-12345" }, "*");
+    window.addEventListener('message', (evt) => {
+      const data = evt?.data || {};
+      if (data && data.type === "PO_META"){
+        setPoMeta({ poDate: data.poDate, poNo: data.poNo });
+      }
+    });
+
+    init();
+  </script>
+</body>
+</html>
