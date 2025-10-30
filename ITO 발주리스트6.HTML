@@ -6,7 +6,7 @@
   <title>한솔PNS IT부문 구매팀 발주 관리</title>
   <style>
     :root{
-      --bg:#0f172a; --panel:#111827; --ink:#e5e7eb; --muted:#9ca3af; --brand:#60a5fa;
+      --bg:#0f172a; --panel:#111827; --ink:#e5e7eb; --muted:#9ca3af; --brand:#60a5fa; --green:#10b981;
     }
     *{box-sizing:border-box}
     body{margin:0; background:var(--bg); color:var(--ink);
@@ -100,6 +100,18 @@
     }
     
     tr:hover{background:rgba(255,255,255,.02);}
+    
+    .excel-btn{
+      padding:6px 12px;
+      border-radius:6px;
+      border:1px solid rgba(255,255,255,.08);
+      background:var(--green);
+      color:#fff;
+      font-size:12px;
+      cursor:pointer;
+      white-space:nowrap;
+    }
+    .excel-btn:hover{background:#059669;}
     
     .pdf-btn{
       padding:6px 12px;
@@ -310,6 +322,7 @@
       });
       
       let html = '<div class="table-wrapper"><table><thead><tr>';
+      html += '<th>엑셀</th>';
       html += '<th>PDF</th>';
       requiredCols.forEach(col => {
         html += `<th>${col}</th>`;
@@ -318,7 +331,8 @@
       
       rows.forEach((row, rowIdx) => {
         html += '<tr>';
-        html += `<td><button class="pdf-btn" onclick="downloadPDF(${rowIdx + 1})">다운로드</button></td>`;
+        html += `<td><button class="excel-btn" onclick="downloadExcel(${rowIdx + 1})">엑셀</button></td>`;
+        html += `<td><button class="pdf-btn" onclick="downloadPDF(${rowIdx + 1})">PDF</button></td>`;
         
         requiredCols.forEach(col => {
           const idx = colMap[col];
@@ -363,8 +377,8 @@
       renderTable(filtered);
     }
     
-    // PDF 다운로드 (발주서 시트 기반)
-    function downloadPDF(dataRowIndex) {
+    // 엑셀 다운로드 (발주서 시트 기반)
+    function downloadExcel(dataRowIndex) {
       if (!workbookData) {
         alert('워크북 데이터가 없습니다.');
         return;
@@ -478,81 +492,94 @@
           fileName = String(orderNumber).replace(/[^a-zA-Z0-9가-힣]/g, '_');
         }
         
-        // Excel 파일로 내보내기 후 HTML로 변환하여 PDF 생성
-        const wbout = XLSX.write(newWorkbook, { bookType: 'xlsx', type: 'array' });
-        
-        // HTML 방식으로 발주서 시트를 PDF로 변환
-        generatePDFFromSheet(newSheet, fileName, orderNumber);
+        // Excel 파일로 내보내기
+        XLSX.writeFile(newWorkbook, `${fileName}_발주서.xlsx`);
         
       } catch (error) {
-        alert('PDF 생성 중 오류가 발생했습니다: ' + error.message);
+        alert('엑셀 생성 중 오류가 발생했습니다: ' + error.message);
         console.error(error);
       }
     }
     
-    // 시트를 PDF로 변환
-    function generatePDFFromSheet(sheet, fileName, orderNumber) {
+    // PDF 다운로드 (발주서 시트 기반)
+    function downloadPDF(dataRowIndex) {
+      if (!workbookData) {
+        alert('워크북 데이터가 없습니다.');
+        return;
+      }
+      
       try {
         const { jsPDF } = window.jspdf;
-        const doc = new jsPDF('p', 'mm', 'a4');
+        
+        // 발주서 시트
+        const templateSheet = workbookData.Sheets[TEMPLATE_SHEET];
+        
+        // 선택된 데이터 행의 정보 가져오기
+        const dataRow = allData[dataRowIndex];
+        const headers = allData[0];
+        
+        // 발주번호 찾기
+        const orderNumIdx = headers.findIndex(h => 
+          String(h || '').toLowerCase().includes('발주번호')
+        );
+        const orderNumber = orderNumIdx !== -1 ? dataRow[orderNumIdx] : '';
+        
+        // 발주번호로 파일명 생성
+        let fileName = 'purchase_order';
+        if (orderNumber) {
+          fileName = String(orderNumber).replace(/[^a-zA-Z0-9가-힣]/g, '_');
+        }
         
         // A1:L109 범위의 데이터 추출
         const range = XLSX.utils.decode_range('A1:L109');
-        const data = [];
+        const tableData = [];
         
         for (let R = range.s.r; R <= range.e.r; ++R) {
           const row = [];
           for (let C = range.s.c; C <= range.e.c; ++C) {
             const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
-            const cell = sheet[cellAddress];
+            const cell = templateSheet[cellAddress];
             
             let value = '';
             if (cell) {
-              if (cell.f) {
-                // 수식이 있는 경우 계산된 값 사용
-                value = cell.v !== undefined ? String(cell.v) : '';
-              } else {
-                value = cell.v !== undefined ? String(cell.v) : '';
+              // C7 셀이면 발주번호로 대체
+              if (cellAddress === 'C7' && orderNumber) {
+                value = orderNumber;
+              } else if (cell.v !== undefined) {
+                value = String(cell.v);
               }
             }
             row.push(value);
           }
-          data.push(row);
+          tableData.push(row);
         }
+        
+        // PDF 생성
+        const doc = new jsPDF('p', 'mm', 'a4');
         
         // 페이지 설정
         const pageWidth = doc.internal.pageSize.getWidth();
         const pageHeight = doc.internal.pageSize.getHeight();
-        const margin = 10;
-        const contentWidth = pageWidth - 2 * margin;
         
-        // 제목 추가
-        doc.setFontSize(16);
-        doc.text('발주서', pageWidth / 2, 15, { align: 'center' });
-        
-        // 발주번호 표시
-        if (orderNumber) {
-          doc.setFontSize(12);
-          doc.text(`발주번호: ${orderNumber}`, margin, 25);
-        }
-        
-        // 테이블로 데이터 표시
+        // autoTable로 데이터 추가
         doc.autoTable({
-          startY: 30,
+          startY: 10,
           head: [],
-          body: data,
+          body: tableData,
           styles: {
-            fontSize: 8,
-            cellPadding: 1,
+            fontSize: 7,
+            cellPadding: 0.5,
             overflow: 'linebreak',
-            cellWidth: 'wrap'
+            cellWidth: 'wrap',
+            halign: 'center',
+            valign: 'middle'
           },
           columnStyles: {
             0: { cellWidth: 15 },
             1: { cellWidth: 15 },
             2: { cellWidth: 15 },
-            3: { cellWidth: 15 },
-            4: { cellWidth: 15 },
+            3: { cellWidth: 20 },
+            4: { cellWidth: 20 },
             5: { cellWidth: 15 },
             6: { cellWidth: 15 },
             7: { cellWidth: 15 },
@@ -561,15 +588,15 @@
             10: { cellWidth: 15 },
             11: { cellWidth: 15 }
           },
-          margin: { top: 30, left: margin, right: margin },
+          margin: { top: 10, left: 5, right: 5 },
           theme: 'grid',
           didDrawPage: function(data) {
             // 페이지 번호
-            doc.setFontSize(10);
+            doc.setFontSize(8);
             doc.text(
-              `Page ${doc.internal.getCurrentPageInfo().pageNumber}`,
+              `${doc.internal.getCurrentPageInfo().pageNumber}`,
               pageWidth / 2,
-              pageHeight - 10,
+              pageHeight - 5,
               { align: 'center' }
             );
           }
@@ -579,7 +606,7 @@
         doc.save(`${fileName}_발주서.pdf`);
         
       } catch (error) {
-        alert('PDF 변환 중 오류가 발생했습니다: ' + error.message);
+        alert('PDF 생성 중 오류가 발생했습니다: ' + error.message);
         console.error(error);
       }
     }
