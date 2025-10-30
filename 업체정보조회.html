@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="ko" data-branch="vendorset">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>업체정보 조회 · 데이터뷰셋 (업체정보.xlsx 자동 로드)</title>
+  <!-- SheetJS (XLSX parser) -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <style>
+    :root{
+      --bg:#0f172a; --panel:#111827; --ink:#e5e7eb; --muted:#9ca3af; --brand:#60a5fa; --border:#1f2937;
+      --ok:#22c55e; --warn:#fbbf24; --sad:#ef4444;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--ink);
+      font-family:system-ui,-apple-system,Segoe UI,Roboto,"Apple SD Gothic Neo","Noto Sans KR",sans-serif}
+    header{position:sticky;top:0;z-index:20;background:linear-gradient(180deg,rgba(17,24,39,.98),rgba(17,24,39,.92));
+      border-bottom:1px solid var(--border)}
+    .wrap{max-width:1200px;margin:0 auto;padding:14px 16px}
+    h1{font-size:18px;margin:0 0 8px 0;letter-spacing:.2px}
+    .controls{display:grid;grid-template-columns:1.2fr .9fr .9fr 1fr auto;gap:10px;align-items:end}
+    .controls label{font-size:12px;color:var(--muted);display:block;margin:0 0 6px}
+    .controls input[type="text"], .controls input[list], .controls select{
+      width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:#0b1220;color:var(--ink)
+    }
+    .controls .row{display:flex;gap:10px}
+    .btn{border:none;background:var(--brand);color:#0b1220;font-weight:600;padding:10px 14px;border-radius:12px;cursor:pointer}
+    .btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--border)}
+    .status{font-size:12px;color:var(--muted);margin-top:6px}
+
+    main{max-width:1200px;margin:0 auto;padding:10px 16px 80px}
+    table{width:100%;border-collapse:separate;border-spacing:0 8px}
+    thead th{position:sticky;top:78px;background:var(--panel);z-index:10;color:var(--muted);
+      font-weight:600;padding:10px 12px;border-bottom:1px solid var(--border)}
+    tbody td{background:rgba(255,255,255,.02);padding:12px;border-top:1px solid rgba(255,255,255,.06);
+      border-bottom:1px solid rgba(255,255,255,.06)}
+    tbody tr{transition:transform .05s ease, box-shadow .05s ease}
+    tbody tr:hover{transform:scale(1.002);box-shadow:0 0 0 1px rgba(255,255,255,.06)}
+    .num{text-align:right;white-space:nowrap}
+    .pill{display:inline-block;padding:2px 8px;border-radius:999px;background:rgba(96,165,250,.15);color:#93c5fd;font-size:12px}
+    .grid-2{display:grid;grid-template-columns:1fr auto;align-items:center;gap:8px}
+
+    footer{position:sticky;bottom:0;background:linear-gradient(0deg,rgba(17,24,39,.98),rgba(17,24,39,.92));
+      border-top:1px solid var(--border);padding:10px 16px;color:var(--muted)}
+    .count{font-variant-numeric:tabular-nums}
+
+    .hint{font-size:12px;color:var(--muted);margin:6px 0 0}
+    .hidden{display:none !important}
+    .warn{color:var(--warn)}
+  </style>
+</head>
+<body>
+  <!-- Header / Controls -->
+  <header>
+    <div class="wrap">
+      <h1>업체정보 조회 · 데이터뷰셋</h1>
+      <div class="controls" id="controls">
+        <!-- 파일 URL (동일 도메인에 두면 ./업체정보.xlsx 로 동작) -->
+        <div>
+          <label for="fileUrl">파일 URL (GitHub Pages/원시 raw 링크 가능)</label>
+          <input type="text" id="fileUrl" placeholder="./업체정보.xlsx" />
+          <div class="status" id="urlStatus">동일 경로에 <span class="pill">업체정보.xlsx</span> 가 있으면 URL을 비워두세요.</div>
+        </div>
+        <!-- 전체 검색 -->
+        <div>
+          <label for="q">전체 검색 (모든 단어 일부라도 검색)</label>
+          <input type="text" id="q" placeholder="예: 방화벽, 서버, 특급, 김대리…" />
+          <div class="hint">모든 열에서 부분 포함 검색됨</div>
+        </div>
+        <!-- 업체명 콤보(드롭다운 + 입력) -->
+        <div>
+          <label for="vendorInput">업체명 (드롭다운 또는 직접입력)</label>
+          <input id="vendorInput" list="vendorList" placeholder="모든 업체" />
+          <datalist id="vendorList"></datalist>
+        </div>
+        <!-- 키워드 콤보(드롭다운 + 입력) -->
+        <div>
+          <label for="kwInput">키워드 (드롭다운 또는 직접입력)</label>
+          <input id="kwInput" list="kwList" placeholder="모든 키워드" />
+          <datalist id="kwList"></datalist>
+        </div>
+        <!-- 액션 버튼들 -->
+        <div class="row">
+          <button class="btn" id="btnLoad">불러오기</button>
+          <button class="btn ghost" id="btnClear">필터 초기화</button>
+        </div>
+      </div>
+      <div class="status" id="loadStatus">상태: 초기화 완료</div>
+    </div>
+  </header>
+
+  <!-- Data Viewset -->
+  <main>
+    <div class="grid-2" style="margin:6px 0 10px">
+      <div class="status">시트: <span class="pill">업체정보</span> · 표시 순서: 날짜 · 업체명 · 업체분류및등급 · 품목명 · 금액 · 키워드 · 담당자 · 연락처 · 대분류 · 중분류 · 소분류</div>
+      <div class="status">페이지 새로고침 없이 URL/필터 변경 가능</div>
+    </div>
+
+    <table id="dataTable" aria-label="업체정보 데이터뷰셋">
+      <thead>
+        <tr id="theadRow"></tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </main>
+
+  <footer>
+    <div class="grid-2">
+      <div class="count" id="count">0 건 표시</div>
+      <div class="status">Tip: 키워드가 여러 개인 셀은 쉼표/슬래시/공백으로 분리해 드롭다운 후보에 자동 추가됩니다.</div>
+    </div>
+  </footer>
+
+  <script>
+    // === 설정값 ===
+    const DEFAULT_FILE_URL = './업체정보.xlsx'; // 같은 디렉토리에 파일을 둘 경우
+    const SHEET_NAME_CANDIDATES = ['업체정보', '업체정보시트', 'Sheet1'];
+
+    // 요구된 표시 순서 (헤더 텍스트)
+    const COLS = ['날짜','업체명','업체분류및등급','품목명','금액','키워드','담당자','연락처','대분류','중분류','소분류'];
+
+    // 상태
+    let RAW_ROWS = [];     // 원본 객체배열
+    let VIEW_ROWS = [];    // 필터 후 표시용
+
+    // DOM 참조
+    const $ = (sel) => document.querySelector(sel);
+    const fileUrlInput = $('#fileUrl');
+    const loadStatus = $('#loadStatus');
+    const qInput = $('#q');
+    const vendorInput = $('#vendorInput');
+    const vendorList = $('#vendorList');
+    const kwInput = $('#kwInput');
+    const kwList = $('#kwList');
+    const btnLoad = $('#btnLoad');
+    const btnClear = $('#btnClear');
+    const theadRow = $('#theadRow');
+    const tbody = $('#tbody');
+    const count = $('#count');
+
+    // 초기 URL 채우기 (localStorage 우선)
+    const savedUrl = localStorage.getItem('vendorset:fileUrl');
+    fileUrlInput.value = savedUrl && savedUrl.trim() !== '' ? savedUrl : '';
+
+    // 테이블 헤더 구축 (요구 순서 고정)
+    function buildThead(){
+      theadRow.innerHTML = '';
+      COLS.forEach(name => {
+        const th = document.createElement('th');
+        th.textContent = name;
+        theadRow.appendChild(th);
+      });
+    }
+
+    // 유틸: 한 줄을 안전 문자열로 변환
+    const toS = (v) => (v===undefined||v===null) ? '' : String(v);
+
+    // 유틸: 숫자처럼 보이면 금액 서식
+    function fmtAmount(v){
+      if (v === undefined || v === null || v === '') return '';
+      const n = Number(String(v).replace(/[,\s]/g,''));
+      if (Number.isFinite(n)) return n.toLocaleString('ko-KR');
+      return toS(v);
+    }
+
+    // 엑셀 불러오기
+    async function loadExcel(url){
+      loadStatus.textContent = '상태: 파일 다운로드 중…';
+      try{
+        const res = await fetch(url || DEFAULT_FILE_URL);
+        if(!res.ok) throw new Error('HTTP '+res.status+' ('+res.statusText+')');
+        const buf = await res.arrayBuffer();
+        const wb = XLSX.read(buf, { type:'array' });
+        // 시트 선택 (우선순위: 업체정보 / 업체정보시트 / 첫 시트)
+        let sheetName = wb.SheetNames.find(n => SHEET_NAME_CANDIDATES.includes(n)) || wb.SheetNames[0];
+        const ws = wb.Sheets[sheetName];
+        if(!ws) throw new Error('시트를 찾을 수 없습니다.');
+
+        // 행렬 형태로 읽고 헤더 맵핑
+        const rows = XLSX.utils.sheet_to_json(ws, { header:1, defval:'' });
+        if(!rows.length){ throw new Error('시트가 비어 있습니다.'); }
+        const header = rows[0].map(h => String(h).trim());
+
+        // 헤더 인덱스 매핑 (요구된 이름이 없으면 -1)
+        const idx = Object.fromEntries(COLS.map(col => [col, header.indexOf(col)]));
+
+        // 객체로 변환 (요구된 순서의 키만 구성)
+        const data = [];
+        for(let r=1; r<rows.length; r++){
+          const row = rows[r];
+          if(row.every(c => String(c).trim()==='')) continue; // 완전 공백행 스킵
+          const obj = {};
+          for(const col of COLS){
+            const i = idx[col];
+            obj[col] = i >= 0 ? row[i] : '';
+          }
+          data.push(obj);
+        }
+
+        RAW_ROWS = data;
+        buildPicklists(RAW_ROWS);
+        applyFilters();
+        loadStatus.textContent = `상태: 불러오기 완료 · ${sheetName} · 총 ${RAW_ROWS.length}건`;
+      }catch(err){
+        console.error(err);
+        loadStatus.innerHTML = `<span class="warn">오류:</span> ${err.message} · URL을 확인하거나 같은 경로에 <span class="pill">업체정보.xlsx</span> 를 두세요.`;
+      }
+    }
+
+    // 드롭다운 후보 구성 (업체명/키워드)
+    function buildPicklists(rows){
+      const vendorSet = new Set();
+      const kwSet = new Set();
+
+      rows.forEach(o => {
+        const v = toS(o['업체명']).trim();
+        if(v) vendorSet.add(v);
+        const k = toS(o['키워드']).trim();
+        if(k){
+          k.split(/[ ,;\/\u3001\u3002\uFF0C\uFF0E]+/).forEach(tok => {
+            const t = tok.trim();
+            if(t) kwSet.add(t);
+          });
+        }
+      });
+
+      vendorList.innerHTML = Array.from(vendorSet).sort((a,b)=>a.localeCompare(b,'ko')).map(v=>`<option value="${escapeHtml(v)}"></option>`).join('');
+      kwList.innerHTML = Array.from(kwSet).sort((a,b)=>a.localeCompare(b,'ko')).map(v=>`<option value="${escapeHtml(v)}"></option>`).join('');
+    }
+
+    function escapeHtml(s){
+      return s.replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;');
+    }
+
+    // 필터 적용 (전체 검색 + 업체명/키워드 부분일치)
+    function applyFilters(){
+      const q = qInput.value.trim().toLowerCase();
+      const fv = vendorInput.value.trim().toLowerCase();
+      const fk = kwInput.value.trim().toLowerCase();
+
+      VIEW_ROWS = RAW_ROWS.filter(o => {
+        // 업체명 필터 (부분일치 허용)
+        if(fv){
+          const vv = toS(o['업체명']).toLowerCase();
+          if(!vv.includes(fv)) return false;
+        }
+        // 키워드 필터 (셀 내 여러 키워드 중 하나라도 부분일치)
+        if(fk){
+          const kk = toS(o['키워드']).toLowerCase();
+          if(!kk.includes(fk)) return false;
+        }
+        // 전체 검색: 모든 열을 이어붙여 부분일치
+        if(q){
+          const blob = COLS.map(c => toS(o[c])).join(' ').toLowerCase();
+          if(!blob.includes(q)) return false;
+        }
+        return true;
+      });
+
+      renderTable();
+    }
+
+    // 테이블 렌더링
+    function renderTable(){
+      buildThead();
+      const fr = document.createDocumentFragment();
+      VIEW_ROWS.forEach(o => {
+        const tr = document.createElement('tr');
+        COLS.forEach(col => {
+          const td = document.createElement('td');
+          let val = o[col];
+          if(col === '금액'){
+            td.className = 'num';
+            td.textContent = fmtAmount(val);
+          } else if(col === '업체분류및등급' || col === '대분류' || col === '중분류' || col === '소분류'){
+            td.innerHTML = val ? `<span class="pill">${escapeHtml(toS(val))}</span>` : '';
+          } else {
+            td.textContent = toS(val);
+          }
+          tr.appendChild(td);
+        });
+        fr.appendChild(tr);
+      });
+      tbody.innerHTML = '';
+      tbody.appendChild(fr);
+      count.textContent = `${VIEW_ROWS.length.toLocaleString('ko-KR')} 건 표시`;
+    }
+
+    // 디바운스 유틸
+    function debounce(fn, t=200){
+      let id;return (...args)=>{ clearTimeout(id); id=setTimeout(()=>fn(...args), t); };
+    }
+
+    // 이벤트 바인딩
+    qInput.addEventListener('input', debounce(applyFilters, 120));
+    vendorInput.addEventListener('input', debounce(applyFilters, 120));
+    kwInput.addEventListener('input', debounce(applyFilters, 120));
+
+    btnClear.addEventListener('click', () => {
+      qInput.value = '';
+      vendorInput.value = '';
+      kwInput.value = '';
+      applyFilters();
+    });
+
+    btnLoad.addEventListener('click', () => {
+      const url = fileUrlInput.value.trim();
+      localStorage.setItem('vendorset:fileUrl', url);
+      loadExcel(url || DEFAULT_FILE_URL);
+    });
+
+    // 초기 로드 시도 (자동)
+    window.addEventListener('DOMContentLoaded', () => {
+      // 자동 URL: localStorage > 입력칸 > DEFAULT
+      const initUrl = savedUrl && savedUrl.trim() !== '' ? savedUrl : (fileUrlInput.value.trim() || DEFAULT_FILE_URL);
+      if(!fileUrlInput.value) fileUrlInput.value = initUrl === DEFAULT_FILE_URL ? '' : initUrl;
+      loadExcel(initUrl);
+    });
+  </script>
+</body>
+</html>
