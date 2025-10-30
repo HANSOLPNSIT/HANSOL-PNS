@@ -501,7 +501,7 @@
       }
     }
     
-    // PDF 다운로드 (발주서 시트 기반)
+    // PDF 다운로드 (엑셀 다운로드와 동일한 발주서 시트 기반)
     function downloadPDF(dataRowIndex) {
       if (!workbookData) {
         alert('워크북 데이터가 없습니다.');
@@ -511,8 +511,9 @@
       try {
         const { jsPDF } = window.jspdf;
         
-        // 발주서 시트
+        // 먼저 엑셀과 동일하게 발주서 시트를 생성
         const templateSheet = workbookData.Sheets[TEMPLATE_SHEET];
+        const dataSheet = workbookData.Sheets[DATA_SHEET];
         
         // 선택된 데이터 행의 정보 가져오기
         const dataRow = allData[dataRowIndex];
@@ -530,21 +531,89 @@
           fileName = String(orderNumber).replace(/[^a-zA-Z0-9가-힣]/g, '_');
         }
         
-        // A1:L109 범위의 데이터 추출
+        // 엑셀과 동일하게 워크북 생성 (수식 계산을 위해)
+        const newWorkbook = XLSX.utils.book_new();
+        
+        // 발주서 시트 복사 (수식 포함)
+        const newSheet = {};
         const range = XLSX.utils.decode_range('A1:L109');
+        
+        for (let R = range.s.r; R <= range.e.r; ++R) {
+          for (let C = range.s.c; C <= range.e.c; ++C) {
+            const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+            const cell = templateSheet[cellAddress];
+            if (cell) {
+              newSheet[cellAddress] = { ...cell };
+            }
+          }
+        }
+        
+        // C7 셀에 발주번호 직접 입력
+        if (orderNumber) {
+          newSheet['C7'] = { t: 's', v: orderNumber };
+        }
+        
+        newSheet['!ref'] = 'A1:L109';
+        
+        // 25년 시트 데이터 준비
+        const dataSheetCopy = {};
+        const dataRange = dataSheet['!ref'] ? XLSX.utils.decode_range(dataSheet['!ref']) : { s: { r: 0, c: 0 }, e: { r: 100, c: 50 } };
+        
+        for (let R = dataRange.s.r; R <= dataRange.e.r; ++R) {
+          for (let C = dataRange.s.c; C <= dataRange.e.c; ++C) {
+            const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+            const cell = dataSheet[cellAddress];
+            if (cell) {
+              dataSheetCopy[cellAddress] = { ...cell };
+            }
+          }
+        }
+        
+        dataSheetCopy['!ref'] = dataSheet['!ref'];
+        
+        // 선택된 행만 남기고 나머지는 헤더만 유지
+        const newDataSheet = {};
+        
+        // 1행: 헤더 복사
+        for (let C = dataRange.s.c; C <= dataRange.e.c; ++C) {
+          const headerAddr = XLSX.utils.encode_cell({ r: 0, c: C });
+          if (dataSheetCopy[headerAddr]) {
+            newDataSheet[headerAddr] = { ...dataSheetCopy[headerAddr] };
+          }
+        }
+        
+        // 2행: 선택된 데이터 행 복사
+        for (let C = dataRange.s.c; C <= dataRange.e.c; ++C) {
+          const sourceAddr = XLSX.utils.encode_cell({ r: dataRowIndex, c: C });
+          const targetAddr = XLSX.utils.encode_cell({ r: 1, c: C });
+          if (dataSheetCopy[sourceAddr]) {
+            newDataSheet[targetAddr] = { ...dataSheetCopy[sourceAddr] };
+          }
+        }
+        
+        newDataSheet['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: 1, c: dataRange.e.c } });
+        
+        // 워크북에 시트 추가하여 수식 계산
+        XLSX.utils.book_append_sheet(newWorkbook, newDataSheet, DATA_SHEET);
+        XLSX.utils.book_append_sheet(newWorkbook, newSheet, TEMPLATE_SHEET);
+        
+        // 발주서 시트의 계산된 값을 가져오기 위해 HTML로 변환 후 다시 읽기
+        const htmlString = XLSX.utils.sheet_to_html(newSheet);
+        
+        // A1:L109 범위의 데이터를 PDF용으로 추출 (수식 계산된 값 포함)
         const tableData = [];
         
         for (let R = range.s.r; R <= range.e.r; ++R) {
           const row = [];
           for (let C = range.s.c; C <= range.e.c; ++C) {
             const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
-            const cell = templateSheet[cellAddress];
+            const cell = newSheet[cellAddress];
             
             let value = '';
             if (cell) {
-              // C7 셀이면 발주번호로 대체
-              if (cellAddress === 'C7' && orderNumber) {
-                value = orderNumber;
+              // 수식이 있으면 계산된 값 사용, 없으면 원래 값 사용
+              if (cell.f && cell.v !== undefined) {
+                value = String(cell.v);
               } else if (cell.v !== undefined) {
                 value = String(cell.v);
               }
