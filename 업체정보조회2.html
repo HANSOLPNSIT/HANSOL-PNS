@@ -1,311 +1,579 @@
 <!DOCTYPE html>
-<html lang="ko" data-branch="vendorset-v2">
+<html lang="ko">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>업체정보 조회 · 데이터뷰셋 (키워드필드 제거 + 열 리사이즈)</title>
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>업체정보 관리 - 한솔PNS IT부문</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <style>
-    :root{
-      --bg:#0f172a; --panel:#111827; --ink:#e5e7eb; --muted:#9ca3af; --brand:#60a5fa; --border:#1f2937;
-      --ok:#22c55e; --warn:#fbbf24; --sad:#ef4444;
+    :root {
+      --bg: #0f172a;
+      --panel: #111827;
+      --ink: #e5e7eb;
+      --muted: #9ca3af;
+      --brand: #60a5fa;
+      --border: rgba(255,255,255,.08);
     }
-    *{box-sizing:border-box}
-    body{margin:0;background:var(--bg);color:var(--ink);
-      font-family:system-ui,-apple-system,Segoe UI,Roboto,"Apple SD Gothic Neo","Noto Sans KR",sans-serif}
-    header{position:sticky;top:0;z-index:20;background:linear-gradient(180deg,rgba(17,24,39,.98),rgba(17,24,39,.92));
-      border-bottom:1px solid var(--border)}
-    .wrap{max-width:100%;margin:0 auto;padding:14px 16px}
-    h1{font-size:18px;margin:0 0 8px 0;letter-spacing:.2px}
-    .controls{display:grid;grid-template-columns:1.2fr .9fr 1fr auto;gap:10px;align-items:end}
-    .controls label{font-size:12px;color:var(--muted);display:block;margin:0 0 6px}
-    .controls input[type="text"], .controls input[list], .controls select{
-      width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:#0b1220;color:var(--ink)
+    
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
     }
-    .controls .row{display:flex;gap:10px}
-    .btn{border:none;background:var(--brand);color:#0b1220;font-weight:600;padding:10px 14px;border-radius:12px;cursor:pointer}
-    .btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--border)}
-    .status{font-size:12px;color:var(--muted);margin-top:6px}
-
-    main{max-width:100%;margin:0 auto;padding:10px 16px 80px}
-    .table-wrap{overflow-x:auto;margin-top:6px}
-    table{width:100%;border-collapse:separate;border-spacing:0 8px;table-layout:fixed;min-width:1400px}
-    thead th{position:sticky;top:78px;background:var(--panel);z-index:10;color:var(--muted);
-      font-weight:600;padding:10px 12px;border-bottom:1px solid var(--border);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-    tbody td{background:rgba(255,255,255,.02);padding:12px;border-top:1px solid rgba(255,255,255,.06);
-      border-bottom:1px solid rgba(255,255,255,.06);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-    tbody tr{transition:transform .05s ease, box-shadow .05s ease}
-    tbody tr:hover{transform:scale(1.002);box-shadow:0 0 0 1px rgba(255,255,255,.06)}
-    .num{text-align:right;white-space:nowrap}
-    .pill{display:inline-block;padding:2px 8px;border-radius:999px;background:rgba(96,165,250,.15);color:#93c5fd;font-size:12px}
-    .grid-2{display:grid;grid-template-columns:1fr auto;align-items:center;gap:8px}
-
-    .resizer{position:absolute;right:0;top:0;width:6px;height:100%;cursor:col-resize;user-select:none}
-    .resizing{cursor:col-resize !important}
-
-    footer{position:sticky;bottom:0;background:linear-gradient(0deg,rgba(17,24,39,.98),rgba(17,24,39,.92));
-      border-top:1px solid var(--border);padding:10px 16px;color:var(--muted)}
-    .count{font-variant-numeric:tabular-nums}
-    .hint{font-size:12px;color:var(--muted);margin:6px 0 0}
-    .warn{color:var(--warn)}
+    
+    body {
+      background: var(--bg);
+      color: var(--ink);
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Noto Sans, Ubuntu, Cantarell, Helvetica Neue, Arial;
+      padding: 20px;
+      line-height: 1.6;
+    }
+    
+    .header {
+      margin-bottom: 20px;
+    }
+    
+    h1 {
+      font-size: 24px;
+      font-weight: 800;
+      margin-bottom: 10px;
+      color: var(--brand);
+    }
+    
+    .controls {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+    
+    .file-input-wrapper {
+      position: relative;
+      overflow: hidden;
+      display: inline-block;
+    }
+    
+    .file-input-wrapper input[type=file] {
+      position: absolute;
+      left: -9999px;
+    }
+    
+    .btn {
+      padding: 10px 20px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--panel);
+      color: var(--ink);
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 600;
+      transition: all 0.2s;
+    }
+    
+    .btn:hover {
+      background: var(--brand);
+      border-color: var(--brand);
+      color: white;
+    }
+    
+    .info {
+      color: var(--muted);
+      font-size: 14px;
+      padding: 10px;
+      background: rgba(96, 165, 250, 0.1);
+      border-radius: 8px;
+      border-left: 3px solid var(--brand);
+    }
+    
+    .search-box {
+      padding: 10px 16px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--panel);
+      color: var(--ink);
+      font-size: 14px;
+      min-width: 300px;
+    }
+    
+    .search-box:focus {
+      outline: none;
+      border-color: var(--brand);
+    }
+    
+    .stats {
+      display: flex;
+      gap: 15px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+    
+    .stat-card {
+      background: var(--panel);
+      padding: 12px 20px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+    }
+    
+    .stat-label {
+      color: var(--muted);
+      font-size: 12px;
+      margin-bottom: 4px;
+    }
+    
+    .stat-value {
+      color: var(--brand);
+      font-size: 20px;
+      font-weight: 700;
+    }
+    
+    /* 테이블 컨테이너 - 스크롤 영역 */
+    .table-container {
+      max-height: calc(100vh - 280px);
+      overflow-y: auto;
+      overflow-x: auto;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: var(--panel);
+      position: relative;
+    }
+    
+    /* 테이블 기본 스타일 */
+    table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      font-size: 13px;
+    }
+    
+    /* 헤더 고정 - 핵심! */
+    thead {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      background: var(--panel);
+    }
+    
+    thead th {
+      background: #1e293b;
+      color: var(--brand);
+      font-weight: 700;
+      text-align: left;
+      padding: 14px 12px;
+      border-bottom: 2px solid var(--brand);
+      white-space: nowrap;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+      cursor: pointer;
+      user-select: none;
+    }
+    
+    thead th:hover {
+      background: #2d3b52;
+    }
+    
+    thead th.sortable::after {
+      content: ' ⇅';
+      opacity: 0.3;
+    }
+    
+    thead th.sorted-asc::after {
+      content: ' ↑';
+      opacity: 1;
+    }
+    
+    thead th.sorted-desc::after {
+      content: ' ↓';
+      opacity: 1;
+    }
+    
+    /* 테이블 바디 */
+    tbody tr {
+      transition: background 0.2s;
+    }
+    
+    tbody tr:hover {
+      background: rgba(96, 165, 250, 0.1);
+    }
+    
+    tbody tr:nth-child(even) {
+      background: rgba(255,255,255,0.02);
+    }
+    
+    tbody tr:nth-child(even):hover {
+      background: rgba(96, 165, 250, 0.12);
+    }
+    
+    tbody td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    
+    /* 날짜 컬럼 스타일 */
+    .date-cell {
+      color: var(--brand);
+      font-family: 'Courier New', monospace;
+      font-weight: 500;
+      white-space: nowrap;
+    }
+    
+    /* 금액 컬럼 스타일 */
+    .amount-cell {
+      text-align: right;
+      font-weight: 600;
+      color: #a5f3fc;
+      white-space: nowrap;
+    }
+    
+    /* 분류 배지 */
+    .category-badge {
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      background: rgba(96, 165, 250, 0.15);
+      color: var(--brand);
+      white-space: nowrap;
+    }
+    
+    /* 키워드 태그 */
+    .keyword-tag {
+      display: inline-block;
+      padding: 2px 6px;
+      margin: 2px;
+      border-radius: 3px;
+      font-size: 10px;
+      background: rgba(251, 191, 36, 0.2);
+      color: #fbbf24;
+    }
+    
+    /* 로딩 상태 */
+    .loading {
+      text-align: center;
+      padding: 40px;
+      color: var(--muted);
+    }
+    
+    .loading::after {
+      content: '...';
+      animation: dots 1.5s steps(4, end) infinite;
+    }
+    
+    @keyframes dots {
+      0%, 20% { content: '.'; }
+      40% { content: '..'; }
+      60%, 100% { content: '...'; }
+    }
+    
+    /* 스크롤바 스타일 */
+    .table-container::-webkit-scrollbar {
+      width: 10px;
+      height: 10px;
+    }
+    
+    .table-container::-webkit-scrollbar-track {
+      background: var(--bg);
+      border-radius: 10px;
+    }
+    
+    .table-container::-webkit-scrollbar-thumb {
+      background: var(--muted);
+      border-radius: 10px;
+    }
+    
+    .table-container::-webkit-scrollbar-thumb:hover {
+      background: var(--brand);
+    }
+    
+    /* 반응형 */
+    @media (max-width: 768px) {
+      body {
+        padding: 10px;
+      }
+      
+      h1 {
+        font-size: 20px;
+      }
+      
+      .search-box {
+        min-width: 100%;
+      }
+      
+      table {
+        font-size: 11px;
+      }
+      
+      thead th, tbody td {
+        padding: 8px 8px;
+      }
+    }
   </style>
 </head>
 <body>
-  <header>
-    <div class="wrap">
-      <h1>업체정보 조회 · 데이터뷰셋</h1>
-      <div class="controls" id="controls">
-        <div>
-          <label for="fileUrl">파일 URL (GitHub Pages/원시 raw 링크 가능)</label>
-          <input type="text" id="fileUrl" placeholder="./업체정보.xlsx" />
-          <div class="status" id="urlStatus">동일 경로에 <span class="pill">업체정보.xlsx</span> 가 있으면 URL을 비워두세요.</div>
-        </div>
-        <div>
-          <label for="q">전체 검색 (모든 단어 일부라도 검색)</label>
-          <input type="text" id="q" placeholder="예: 방화벽, 서버, 특급, 김대리…" />
-          <div class="hint">모든 열에서 부분 포함 검색됨</div>
-        </div>
-        <div>
-          <label for="vendorInput">업체명 (드롭다운 또는 직접입력)</label>
-          <input id="vendorInput" list="vendorList" placeholder="모든 업체" />
-          <datalist id="vendorList"></datalist>
-        </div>
-        <div class="row">
-          <button class="btn" id="btnLoad">불러오기</button>
-          <button class="btn ghost" id="btnClear">필터 초기화</button>
-        </div>
-      </div>
-      <div class="status" id="loadStatus">상태: 초기화 완료</div>
+  <div class="header">
+    <h1>📦 업체정보 관리</h1>
+  </div>
+  
+  <div class="controls">
+    <div class="file-input-wrapper">
+      <label for="excelFile" class="btn">📁 업체정보.xlsx 파일 선택</label>
+      <input type="file" id="excelFile" accept=".xlsx, .xls" />
     </div>
-  </header>
-
-  <main>
-    <div class="grid-2" style="margin:6px 0 10px">
-      <div class="status">시트: <span class="pill">업체정보</span> · 표시 순서: 날짜 · 업체명 · 업체분류및등급 · 품목명 · 금액 · 키워드 · 담당자 · 연락처 · 대분류 · 중분류 · 소분류</div>
-      <div class="status">열 헤더의 오른쪽 경계를 드래그해 폭을 조절하세요. 폭은 브라우저(LocalStorage)에 저장됩니다.</div>
+    <input type="text" id="searchBox" class="search-box" placeholder="🔍 검색 (업체명, 품목명, 키워드 등...)" />
+  </div>
+  
+  <div class="info" id="infoBox">
+    📌 업체정보.xlsx 파일을 선택하면 자동으로 데이터를 불러옵니다. 헤더를 클릭하면 정렬됩니다.
+  </div>
+  
+  <div class="stats" id="statsBox" style="display:none;">
+    <div class="stat-card">
+      <div class="stat-label">전체 업체</div>
+      <div class="stat-value" id="totalCount">0</div>
     </div>
-
-    <div class="table-wrap">
-      <table id="dataTable" aria-label="업체정보 데이터뷰셋">
-        <thead>
-          <tr id="theadRow"></tr>
-        </thead>
-        <tbody id="tbody"></tbody>
-      </table>
+    <div class="stat-card">
+      <div class="stat-label">표시 중</div>
+      <div class="stat-value" id="displayCount">0</div>
     </div>
-  </main>
-
-  <footer>
-    <div class="grid-2">
-      <div class="count" id="count">0 건 표시</div>
-      <div class="status">Tip: 키워드가 여러 개인 셀은 쉼표/슬래시/공백으로 분리되어도 전체 검색으로 찾을 수 있어요.</div>
+    <div class="stat-card">
+      <div class="stat-label">총 금액</div>
+      <div class="stat-value" id="totalAmount">0원</div>
     </div>
-  </footer>
+  </div>
+  
+  <div class="table-container">
+    <table id="dataTable">
+      <thead>
+        <tr>
+          <th class="sortable" data-column="날짜">날짜</th>
+          <th class="sortable" data-column="업체명">업체명</th>
+          <th class="sortable" data-column="업체분류및등급">업체분류및등급</th>
+          <th class="sortable" data-column="품목명">품목명</th>
+          <th class="sortable" data-column="금액">금액</th>
+          <th class="sortable" data-column="키워드">키워드</th>
+          <th class="sortable" data-column="담당자">담당자</th>
+          <th class="sortable" data-column="연락처">연락처</th>
+          <th class="sortable" data-column="대분류">대분류</th>
+          <th class="sortable" data-column="중분류">중분류</th>
+          <th class="sortable" data-column="소분류">소분류</th>
+        </tr>
+      </thead>
+      <tbody id="dataBody">
+        <tr>
+          <td colspan="11" class="loading">파일을 선택해주세요</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
 
   <script>
-    // === 설정값 & 상태 ===
-    const DEFAULT_FILE_URL = './업체정보.xlsx';
-    const SHEET_NAME_CANDIDATES = ['업체정보', '업체정보시트', 'Sheet1'];
-    const COLS = ['날짜','업체명','업체분류및등급','품목명','금액','키워드','담당자','연락처','대분류','중분류','소분류'];
+    let allData = [];
+    let filteredData = [];
+    let currentSort = { column: null, direction: 'asc' };
 
-    let RAW_ROWS = [];
-    let VIEW_ROWS = [];
-
-    // 열 너비 저장/로드
-    let COL_WIDTHS = {};
-    try{ COL_WIDTHS = JSON.parse(localStorage.getItem('vendorset:colWidths')||'{}')||{}; }catch(e){ COL_WIDTHS = {}; }
-    function saveWidths(){ localStorage.setItem('vendorset:colWidths', JSON.stringify(COL_WIDTHS)); }
-
-    // DOM
-    const $ = (sel) => document.querySelector(sel);
-    const fileUrlInput = $('#fileUrl');
-    const loadStatus = $('#loadStatus');
-    const qInput = $('#q');
-    const vendorInput = $('#vendorInput');
-    const vendorList = $('#vendorList');
-    const btnLoad = $('#btnLoad');
-    const btnClear = $('#btnClear');
-    const theadRow = $('#theadRow');
-    const tbody = $('#tbody');
-    const count = $('#count');
-
-    const savedUrl = localStorage.getItem('vendorset:fileUrl');
-    fileUrlInput.value = savedUrl && savedUrl.trim() !== '' ? savedUrl : '';
-
-    function toS(v){ return (v===undefined||v===null) ? '' : String(v); }
-    function fmtAmount(v){
-      if (v === undefined || v === null || v === '') return '';
-      const n = Number(String(v).replace(/[ ,\s]/g,''));
-      if (Number.isFinite(n)) return n.toLocaleString('ko-KR');
-      return toS(v);
-    }
-
-    async function loadExcel(url){
-      loadStatus.textContent = '상태: 파일 다운로드 중…';
-      try{
-        const res = await fetch(url || DEFAULT_FILE_URL);
-        if(!res.ok) throw new Error('HTTP '+res.status+' ('+res.statusText+')');
-        const buf = await res.arrayBuffer();
-        const wb = XLSX.read(buf, { type:'array' });
-        let sheetName = wb.SheetNames.find(n => SHEET_NAME_CANDIDATES.includes(n)) || wb.SheetNames[0];
-        const ws = wb.Sheets[sheetName];
-        if(!ws) throw new Error('시트를 찾을 수 없습니다.');
-
-        const rows = XLSX.utils.sheet_to_json(ws, { header:1, defval:'' });
-        if(!rows.length){ throw new Error('시트가 비어 있습니다.'); }
-        const header = rows[0].map(h => String(h).trim());
-        const idx = Object.fromEntries(COLS.map(col => [col, header.indexOf(col)]));
-
-        const data = [];
-        for(let r=1; r<rows.length; r++){
-          const row = rows[r];
-          if(row.every(c => String(c).trim()==='')) continue;
-          const obj = {};
-          for(const col of COLS){
-            const i = idx[col];
-            obj[col] = i >= 0 ? row[i] : '';
-          }
-          data.push(obj);
-        }
-
-        RAW_ROWS = data;
-        buildPicklists(RAW_ROWS);
-        applyFilters();
-        loadStatus.textContent = `상태: 불러오기 완료 · ${sheetName} · 총 ${RAW_ROWS.length}건`;
-      }catch(err){
-        console.error(err);
-        loadStatus.innerHTML = `<span class="warn">오류:</span> ${err.message} · URL을 확인하거나 같은 경로에 <span class="pill">업체정보.xlsx</span> 를 두세요.`;
+    // 날짜를 YYYY-MM-DD 형식으로 변환
+    function formatDate(value) {
+      if (!value) return '';
+      
+      // 이미 YYYY-MM-DD 형식이면 그대로 반환
+      if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+        return value;
       }
+      
+      let date;
+      
+      // Excel 날짜 시리얼 번호인 경우
+      if (typeof value === 'number') {
+        // Excel은 1900년 1월 1일을 1로 시작 (1900-01-01 = 1)
+        const excelEpoch = new Date(1899, 11, 30); // 1899-12-30
+        date = new Date(excelEpoch.getTime() + value * 86400000);
+      } else {
+        date = new Date(value);
+      }
+      
+      if (isNaN(date.getTime())) return value; // 변환 실패 시 원본 반환
+      
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      
+      return `${year}-${month}-${day}`;
     }
 
-    function buildPicklists(rows){
-      const vendorSet = new Set();
-      rows.forEach(o => {
-        const v = toS(o['업체명']).trim();
-        if(v) vendorSet.add(v);
-      });
-      vendorList.innerHTML = Array.from(vendorSet)
-        .sort((a,b)=>a.localeCompare(b,'ko'))
-        .map(v=>`<option value="${escapeHtml(v)}"></option>`).join('');
-    }
-    function escapeHtml(s){
-      return s.replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;');
+    // 금액을 한국 원화 형식으로 변환
+    function formatCurrency(amount) {
+      if (!amount && amount !== 0) return '';
+      const num = typeof amount === 'string' ? parseFloat(amount.replace(/[^0-9.-]/g, '')) : amount;
+      if (isNaN(num)) return amount;
+      return new Intl.NumberFormat('ko-KR').format(num) + '원';
     }
 
-    function applyFilters(){
-      const q = qInput.value.trim().toLowerCase();
-      const fv = vendorInput.value.trim().toLowerCase();
-
-      VIEW_ROWS = RAW_ROWS.filter(o => {
-        if(fv){
-          const vv = toS(o['업체명']).toLowerCase();
-          if(!vv.includes(fv)) return false;
-        }
-        if(q){
-          const blob = COLS.map(c => toS(o[c])).join(' ').toLowerCase();
-          if(!blob.includes(q)) return false;
-        }
-        return true;
-      });
-      renderTable();
+    // 키워드를 태그로 변환
+    function formatKeywords(keywords) {
+      if (!keywords) return '';
+      const keywordArray = keywords.toString().split(/[,;\/]/).map(k => k.trim()).filter(k => k);
+      return keywordArray.map(k => `<span class="keyword-tag">${k}</span>`).join('');
     }
 
-    function buildThead(){
-      theadRow.innerHTML = '';
-      COLS.forEach((name) => {
-        const th = document.createElement('th');
-        th.textContent = name;
-        const w = COL_WIDTHS[name];
-        if(w){ th.style.width = w + 'px'; }
-        const grip = document.createElement('span');
-        grip.className = 'resizer';
-        grip.title = '드래그로 열 너비 조절';
-        th.appendChild(grip);
-        enableResize(th, name);
-        theadRow.appendChild(th);
-      });
-    }
-
-    function renderTable(){
-      buildThead();
-      const fr = document.createDocumentFragment();
-      VIEW_ROWS.forEach(o => {
-        const tr = document.createElement('tr');
-        COLS.forEach(col => {
-          const td = document.createElement('td');
-          let val = o[col];
-          if(col === '금액'){
-            td.className = 'num';
-            td.textContent = fmtAmount(val);
-          } else if(col === '업체분류및등급' || col === '대분류' || col === '중분류' || col === '소분류'){
-            td.innerHTML = val ? `<span class="pill">${escapeHtml(toS(val))}</span>` : '';
-          } else {
-            td.textContent = toS(val);
+    // 엑셀 파일 읽기
+    document.getElementById('excelFile').addEventListener('change', function(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      
+      document.getElementById('infoBox').innerHTML = '⏳ 파일을 읽는 중...';
+      document.getElementById('dataBody').innerHTML = '<tr><td colspan="11" class="loading">데이터 로딩 중</td></tr>';
+      
+      const reader = new FileReader();
+      
+      reader.onload = function(e) {
+        try {
+          const data = new Uint8Array(e.target.result);
+          const workbook = XLSX.read(data, { type: 'array', cellDates: true });
+          
+          // 첫 번째 시트 읽기
+          const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+          const jsonData = XLSX.utils.sheet_to_json(firstSheet);
+          
+          if (jsonData.length === 0) {
+            document.getElementById('infoBox').innerHTML = '⚠️ 데이터가 없습니다.';
+            return;
           }
-          tr.appendChild(td);
-        });
-        fr.appendChild(tr);
-      });
+          
+          allData = jsonData;
+          filteredData = [...allData];
+          
+          document.getElementById('infoBox').innerHTML = 
+            `✅ 총 <strong>${allData.length}건</strong>의 데이터를 불러왔습니다. (파일: ${file.name})`;
+          document.getElementById('statsBox').style.display = 'flex';
+          
+          renderTable(filteredData);
+          updateStats(filteredData);
+          
+        } catch (error) {
+          console.error('파일 읽기 오류:', error);
+          document.getElementById('infoBox').innerHTML = 
+            '❌ 파일을 읽는 중 오류가 발생했습니다: ' + error.message;
+        }
+      };
+      
+      reader.onerror = function() {
+        document.getElementById('infoBox').innerHTML = '❌ 파일을 읽을 수 없습니다.';
+      };
+      
+      reader.readAsArrayBuffer(file);
+    });
+
+    // 테이블 렌더링
+    function renderTable(data) {
+      const tbody = document.getElementById('dataBody');
       tbody.innerHTML = '';
-      tbody.appendChild(fr);
-
-      const ths = Array.from(theadRow.children);
-      Array.from(tbody.rows).forEach(tr => {
-        Array.from(tr.cells).forEach((td, idx) => {
-          const w = ths[idx] && parseFloat(ths[idx].style.width);
-          if(w) td.style.width = w + 'px';
-        });
+      
+      if (data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="11" style="text-align:center; padding:40px; color:var(--muted);">검색 결과가 없습니다.</td></tr>';
+        return;
+      }
+      
+      data.forEach((row, index) => {
+        const tr = document.createElement('tr');
+        
+        tr.innerHTML = `
+          <td class="date-cell">${formatDate(row['날짜'] || row['date'] || '')}</td>
+          <td><strong>${row['업체명'] || ''}</strong></td>
+          <td><span class="category-badge">${row['업체분류및등급'] || ''}</span></td>
+          <td>${row['품목명'] || ''}</td>
+          <td class="amount-cell">${formatCurrency(row['금액'] || '')}</td>
+          <td>${formatKeywords(row['키워드'] || '')}</td>
+          <td>${row['담당자'] || ''}</td>
+          <td>${row['연락처'] || ''}</td>
+          <td>${row['대분류'] || ''}</td>
+          <td>${row['중분류'] || ''}</td>
+          <td>${row['소분류'] || ''}</td>
+        `;
+        
+        tbody.appendChild(tr);
       });
-      count.textContent = `${VIEW_ROWS.length.toLocaleString('ko-KR')} 건 표시`;
     }
 
-    function enableResize(th, name){
-      const grip = th.querySelector('.resizer');
-      let startX=0, startW=0;
-      function onDown(e){
-        startX = e.clientX; startW = th.getBoundingClientRect().width;
-        document.body.classList.add('resizing');
-        window.addEventListener('mousemove', onMove);
-        window.addEventListener('mouseup', onUp, { once:true });
-        e.preventDefault();
-      }
-      function onMove(e){
-        const dx = e.clientX - startX; const w = Math.max(80, Math.round(startW + dx));
-        th.style.width = w + 'px';
-      }
-      function onUp(){
-        document.body.classList.remove('resizing');
-        const w = parseFloat(th.style.width);
-        if(Number.isFinite(w)){
-          COL_WIDTHS[name] = w; saveWidths();
-          const idx = Array.from(theadRow.children).indexOf(th);
-          Array.from(tbody.rows).forEach(tr => {
-            const td = tr.cells[idx]; if(td) td.style.width = w + 'px';
+    // 통계 업데이트
+    function updateStats(data) {
+      document.getElementById('totalCount').textContent = allData.length;
+      document.getElementById('displayCount').textContent = data.length;
+      
+      const total = data.reduce((sum, row) => {
+        const amount = row['금액'] || 0;
+        const num = typeof amount === 'string' ? parseFloat(amount.replace(/[^0-9.-]/g, '')) : amount;
+        return sum + (isNaN(num) ? 0 : num);
+      }, 0);
+      
+      document.getElementById('totalAmount').textContent = formatCurrency(total);
+    }
+
+    // 검색 기능
+    document.getElementById('searchBox').addEventListener('input', function(e) {
+      const keyword = e.target.value.toLowerCase().trim();
+      
+      if (!keyword) {
+        filteredData = [...allData];
+      } else {
+        filteredData = allData.filter(row => {
+          return Object.values(row).some(value => {
+            if (value === null || value === undefined) return false;
+            return value.toString().toLowerCase().includes(keyword);
           });
-        }
-        window.removeEventListener('mousemove', onMove);
+        });
       }
-      grip.addEventListener('mousedown', onDown);
-    }
-
-    qInput.addEventListener('input', debounce(applyFilters, 120));
-    vendorInput.addEventListener('input', debounce(applyFilters, 120));
-
-    btnClear.addEventListener('click', () => {
-      qInput.value = ''; vendorInput.value = ''; applyFilters();
-    });
-    btnLoad.addEventListener('click', () => {
-      const url = fileUrlInput.value.trim();
-      localStorage.setItem('vendorset:fileUrl', url);
-      loadExcel(url || DEFAULT_FILE_URL);
+      
+      renderTable(filteredData);
+      updateStats(filteredData);
     });
 
-    function debounce(fn, t=200){ let id; return (...args)=>{ clearTimeout(id); id=setTimeout(()=>fn(...args), t); }; }
-
-    window.addEventListener('DOMContentLoaded', () => {
-      const initUrl = (savedUrl && savedUrl.trim() !== '') ? savedUrl : (fileUrlInput.value.trim() || DEFAULT_FILE_URL);
-      if(!fileUrlInput.value) fileUrlInput.value = initUrl === DEFAULT_FILE_URL ? '' : initUrl;
-      loadExcel(initUrl);
+    // 정렬 기능
+    document.querySelectorAll('thead th.sortable').forEach(th => {
+      th.addEventListener('click', function() {
+        const column = this.dataset.column;
+        
+        // 정렬 방향 결정
+        if (currentSort.column === column) {
+          currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
+        } else {
+          currentSort.column = column;
+          currentSort.direction = 'asc';
+        }
+        
+        // 헤더 스타일 업데이트
+        document.querySelectorAll('thead th.sortable').forEach(h => {
+          h.classList.remove('sorted-asc', 'sorted-desc');
+        });
+        this.classList.add(currentSort.direction === 'asc' ? 'sorted-asc' : 'sorted-desc');
+        
+        // 데이터 정렬
+        filteredData.sort((a, b) => {
+          let aVal = a[column];
+          let bVal = b[column];
+          
+          // 날짜 처리
+          if (column === '날짜') {
+            aVal = new Date(formatDate(aVal));
+            bVal = new Date(formatDate(bVal));
+          }
+          // 금액 처리
+          else if (column === '금액') {
+            aVal = typeof aVal === 'string' ? parseFloat(aVal.replace(/[^0-9.-]/g, '')) : (aVal || 0);
+            bVal = typeof bVal === 'string' ? parseFloat(bVal.replace(/[^0-9.-]/g, '')) : (bVal || 0);
+          }
+          // 문자열 처리
+          else {
+            aVal = (aVal || '').toString().toLowerCase();
+            bVal = (bVal || '').toString().toLowerCase();
+          }
+          
+          if (aVal < bVal) return currentSort.direction === 'asc' ? -1 : 1;
+          if (aVal > bVal) return currentSort.direction === 'asc' ? 1 : -1;
+          return 0;
+        });
+        
+        renderTable(filteredData);
+      });
     });
   </script>
 </body>
