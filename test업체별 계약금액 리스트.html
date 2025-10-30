@@ -86,7 +86,7 @@
         <th class="sortable" data-key="grade">서비스 등급내역</th>
         <th class="sortable right" data-key="qty">서비스수량</th>
         <th class="sortable" data-key="note">비고</th>
-        <!-- ✅ 비고 옆에 ‘구매처명’ 노출 -->
+        <!-- ✅ 비고 옆에 '구매처명' 노출 -->
         <th class="sortable" data-key="vendor">구매처명</th>
         <!-- 내부 용도: 대분류는 계속 숨김 -->
         <th class="hidden">대분류</th>
@@ -237,6 +237,7 @@ function loadSheet(wb){
       vendor:norm(r[map.vendor]),
       category:norm(r[map.category]),
       poDate:parseDate(r[map.poDate]),
+      ponumber:map.ponumber!==-1?norm(r[map.ponumber]):"",
       projectCode:map.projectCode!==-1?norm(r[map.projectCode]):"",
       project:norm(r[map.project]),
       type:norm(r[map.type]),
@@ -246,7 +247,7 @@ function loadSheet(wb){
       qty:r[map.qty]===""?"":Number(String(r[map.qty]).replace(/[^\d.-]/g,"")),
       note:norm(r[map.note])
     };
-    obj._search=[obj.vendor,obj.category,obj.projectCode,obj.project,obj.type,obj.unit,obj.grade,obj.note,obj.unitPrice,obj.qty,fmtDate(obj.poDate)].join(" ").toLowerCase();
+    obj._search=[obj.vendor,obj.category,obj.ponumber,obj.projectCode,obj.project,obj.type,obj.unit,obj.grade,obj.note,obj.unitPrice,obj.qty,fmtDate(obj.poDate)].join(" ").toLowerCase();
     return obj;
   }).filter(r=>Object.values(r).some(v=>v!==""));
 
@@ -314,6 +315,7 @@ function renderTable(){
   const html=viewRows.map(r=>`
   <tr>
     <td>${fmtDate(r.poDate)}</td>
+    <td>${escapeHtml(r.ponumber)}</td>
     <td>${escapeHtml(r.projectCode)}</td>
     <td>${escapeHtml(r.project)}</td>
     <td>${escapeHtml(r.type)}</td>
@@ -326,7 +328,7 @@ function renderTable(){
     <td>${escapeHtml(r.vendor)}</td>
     <td class="hidden">${escapeHtml(r.category)}</td>
   </tr>`).join("");
-  tbody.innerHTML=html||`<tr><td colspan="11" style="text-align:center;color:var(--muted);padding:22px;">조건에 맞는 데이터가 없습니다.</td></tr>`;
+  tbody.innerHTML=html||`<tr><td colspan="12" style="text-align:center;color:var(--muted);padding:22px;">조건에 맞는 데이터가 없습니다.</td></tr>`;
   updateSortIndicators();
 }
 
@@ -379,7 +381,7 @@ async function loadDefault(){
     const wb=XLSX.read(buf);
     loadSheet(wb);
   }catch(e){
-    tbody.innerHTML=`<tr><td colspan="11" style="text-align:center;color:var(--muted);padding:22px;">기본 파일을 찾을 수 없습니다. 파일을 직접 업로드해주세요.</td></tr>`;
+    tbody.innerHTML=`<tr><td colspan="12" style="text-align:center;color:var(--muted);padding:22px;">기본 파일을 찾을 수 없습니다. 파일을 직접 업로드해주세요.</td></tr>`;
   }
 }
 loadDefault();
