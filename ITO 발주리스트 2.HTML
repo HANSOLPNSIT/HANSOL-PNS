@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ITO · 엑셀 수식 기반 데이터뷰 + 발주서 PDF 출력</title>
+  <!-- SheetJS (xlsx) -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <!-- xlsx-calc (수식 재계산) -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx-calc@0.6.3/dist/xlsx-calc.min.js"></script>
+  <!-- html2pdf (html2canvas + jsPDF 번들) -->
+  <script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js"></script>
+  <style>
+    :root{
+      --bg:#0f172a;--panel:#111827;--ink:#e5e7eb;--muted:#9ca3af;--accent:#60a5fa;--border:#1f2937;
+      --paper:#ffffff;--ink2:#111827;
+      --safe-top:16px; --safe-side:18px;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,Segoe UI,Roboto,"Apple SD Gothic Neo","Noto Sans KR",sans-serif}
+    header{position:sticky;top:0;z-index:5;background:linear-gradient(180deg,rgba(17,24,39,.97),rgba(17,24,39,.94));border-bottom:1px solid var(--border);padding:14px 16px}
+    h1{margin:0;font-size:18px;font-weight:700}
+    .wrap{display:grid;grid-template-columns:320px 1fr;min-height:calc(100vh - 58px)}
+    aside{border-right:1px solid var(--border);padding:14px;background:var(--panel)}
+    main{padding:16px}
+
+    .field{display:flex;flex-direction:column;gap:8px;margin-bottom:14px}
+    .label{font-size:12px;color:var(--muted)}
+    input[type="text"], input[type="url"], input[type="file"], button, select{
+      background:#0b1220;color:var(--ink);border:1px solid var(--border);border-radius:10px;padding:10px 12px;font-size:14px
+    }
+    button{cursor:pointer}
+    button.primary{background:var(--accent);color:#03122a;border:0;font-weight:700}
+    .row{display:flex;gap:8px;align-items:center}
+    .muted{color:var(--muted);font-size:12px}
+
+    .table{width:100%;border-collapse:separate;border-spacing:0 6px}
+    .thead{display:grid;grid-template-columns:160px 140px 160px 1fr 140px 120px 120px;gap:8px;position:sticky;top:0;background:var(--panel);padding:10px;border:1px solid var(--border);border-radius:12px;margin-bottom:8px}
+    .thead span{font-size:12px;color:var(--muted)}
+    .tbody{display:flex;flex-direction:column;gap:8px}
+    .tr{display:grid;grid-template-columns:160px 140px 160px 1fr 140px 120px 120px;gap:8px;align-items:center;background:#0b1220;border:1px solid var(--border);border-radius:12px;padding:10px}
+    .tr .po{font-weight:700}
+    .tr .pdfbtn{justify-self:start}
+
+    .badge{display:inline-flex;align-items:center;gap:6px;padding:4px 8px;border:1px solid var(--border);border-radius:999px;font-size:12px;color:var(--muted)}
+
+    /* A4 렌더 캔버스 (발주서 시트 A1:L109 그대로 표로 변환) */
+    #printHost{position:fixed;left:-99999px;top:0;width:0;height:0;overflow:hidden;background:#fff}
+    .sheetA4{width:210mm;min-height:297mm;background:var(--paper);color:var(--ink2);padding:0;margin:0;border:1px solid #eee}
+    .sheetA4 table{border-collapse:collapse;width:100%;table-layout:fixed}
+    .sheetA4 td, .sheetA4 th{border:1px solid #d1d5db;min-height:18px;padding:2px 4px;word-wrap:break-word;white-space:pre-wrap;font-size:11px;line-height:1.25}
+    .pb{page-break-after:always}
+    .no-border td{border:0}
+
+    .help{margin-top:10px}
+    a.inline{color:#9bd0ff;text-decoration:none}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>ITO · 데이터뷰(25년 시트) + 발주서 PDF 출력 (수식 반영)</h1>
+  </header>
+  <div class="wrap">
+    <aside>
+      <div class="field">
+        <div class="label">기본 불러올 GitHub Raw 엑셀 URL</div>
+        <input id="githubUrl" type="url" placeholder="예: https://raw.githubusercontent.com/USER/REPO/branch/ito.xlsx">
+        <div class="row">
+          <button class="primary" id="btnFetch">GitHub에서 불러오기</button>
+          <span class="badge" id="loadState">대기중</span>
+        </div>
+        <div class="muted">또는 아래에서 직접 업로드</div>
+        <input id="fileInput" type="file" accept=".xlsx,.xlsm" />
+      </div>
+      <div class="field">
+        <div class="label">전체 검색 (일부 단어 포함)</div>
+        <input id="q" type="text" placeholder="발주번호/공급처/내용/금액/FROM/TO/발주일...">
+      </div>
+      <div class="help muted">
+        • 25년 시트의 1행에서 아래 열을 자동 인식합니다:<br>
+        <b>발주일, 발주번호, 공급처, 내용, 발주금액, FROM, TO</b><br>
+        • 각 행 카드의 <b>PDF</b> 버튼을 누르면 <b>발주서</b> 시트의 <b>C7</b>에 해당 발주번호를 넣고, 수식을 재계산하여 <b>A1:L109</b> 범위를 PDF로 저장합니다.
+      </div>
+    </aside>
+    <main>
+      <div class="thead">
+        <span>공급처</span>
+        <span class="po">발주번호</span>
+        <span>발주일</span>
+        <span>내용</span>
+        <span>발주금액</span>
+        <span>FROM</span>
+        <span>TO</span>
+      </div>
+      <div id="tbody" class="tbody"></div>
+    </main>
+  </div>
+
+  <!-- 숨김 출력용 컨테이너: 발주서 시트 A1:L109을 표로 그려 PDF 렌더 -->
+  <div id="printHost"></div>
+
+<script>
+(function(){
+  let workbook;        // 원본 워크북 (SheetJS 객체)
+  let wbJSON;          // xlsx-calc용 JSON (수식 재계산 전용)
+  let listRows = [];   // 데이터뷰 행들
+  const TNAME = '25년';
+  const ORDER_SHEET = '발주서';
+  const PRINT_RANGE = { s:{c:0,r:0}, e:{c:11,r:108} }; // A1:L109 -> col 0..11, row 0..108
+
+  const el = id=>document.getElementById(id);
+  const $tbody = el('tbody');
+  const $q = el('q');
+  const $loadState = el('loadState');
+
+  function setState(msg){ $loadState.textContent = msg; }
+
+  // ArrayBuffer -> Workbook 로드
+  async function loadWorkbook(arrayBuffer){
+    workbook = XLSX.read(arrayBuffer, { type:'array', cellFormula:true, cellNF:true, cellDates:true });
+    // xlsx-calc 계산용 JSON 복제
+    wbJSON = XLSX.utils.book_new();
+    wbJSON.SheetNames = [...workbook.SheetNames];
+    wbJSON.Sheets = {};
+    workbook.SheetNames.forEach(name=>{ wbJSON.Sheets[name] = JSON.parse(JSON.stringify(workbook.Sheets[name])); });
+
+    setState('엑셀 로드 완료, 데이터뷰 생성중…');
+    buildDataView();
+  }
+
+  // 25년 시트에서 헤더 매핑
+  function getHeaderMap(ws){
+    const headerRow = XLSX.utils.sheet_to_json(ws, { header:1, range:0, blankrows:false })[0] || [];
+    const need = ['발주일','발주번호','공급처','내용','발주금액','FROM','TO'];
+    const idx = {};
+    need.forEach(h=>{ idx[h] = headerRow.indexOf(h); });
+    return idx; // 각 헤더의 0-based 인덱스 (없으면 -1)
+  }
+
+  function buildDataView(){
+    const ws = workbook.Sheets[TNAME];
+    if(!ws){ setState('오류: "25년" 시트를 찾을 수 없습니다.'); return; }
+    const headerIdx = getHeaderMap(ws);
+    const data = XLSX.utils.sheet_to_json(ws, { header:1, range:1, defval:'' }); // 2행부터
+
+    listRows = data.map(r=>({
+      공급처: r[headerIdx['공급처']] || '',
+      발주번호: r[headerIdx['발주번호']] || '',
+      발주일: r[headerIdx['발주일']] || '',
+      내용: r[headerIdx['내용']] || '',
+      발주금액: r[headerIdx['발주금액']] || '',
+      FROM: r[headerIdx['FROM']] || '',
+      TO: r[headerIdx['TO']] || ''
+    })).filter(row=> Object.values(row).some(v=> String(v).trim()!==''));
+
+    renderRows(listRows);
+    setState(`불러오기 완료 · ${listRows.length}건`);
+  }
+
+  function renderRows(rows){
+    $tbody.innerHTML = '';
+    const frag = document.createDocumentFragment();
+    rows.forEach(row=>{
+      const div = document.createElement('div');
+      div.className = 'tr';
+      div.innerHTML = `
+        <div>${esc(row.공급처)}</div>
+        <div class="po">${esc(row.발주번호)}</div>
+        <div>${esc(row.발주일)}</div>
+        <div>${esc(row.내용)}</div>
+        <div>${fmtMoney(row.발주금액)}</div>
+        <div>${esc(row.FROM)}</div>
+        <div class="row">
+          <span>${esc(row.TO)}</span>
+          <button class="pdfbtn" data-po="${escAttr(row.발주번호)}">PDF</button>
+        </div>`;
+      frag.appendChild(div);
+    });
+    $tbody.appendChild(frag);
+  }
+
+  function esc(s){ return String(s).replace(/[&<>"']/g, m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[m])); }
+  function escAttr(s){ return esc(s).replace(/"/g,'&quot;'); }
+  function fmtMoney(v){
+    const n = Number(String(v).replace(/[^0-9.-]/g,''));
+    if(!isFinite(n)) return esc(v);
+    return n.toLocaleString('ko-KR');
+  }
+
+  // 검색 (일부 단어 포함, 전열 대상)
+  $q.addEventListener('input', ()=>{
+    const kw = $q.value.trim().toLowerCase();
+    if(!kw){ renderRows(listRows); return; }
+    const filtered = listRows.filter(r=>{
+      return Object.values(r).some(val=> String(val).toLowerCase().includes(kw));
+    });
+    renderRows(filtered);
+  });
+
+  // GitHub URL에서 불러오기
+  el('btnFetch').addEventListener('click', async()=>{
+    try{
+      const url = el('githubUrl').value.trim();
+      if(!url){ alert('GitHub Raw 엑셀 URL을 입력하세요.'); return; }
+      setState('다운로드 중…');
+      const res = await fetch(url, { cache:'no-store' });
+      if(!res.ok) throw new Error('다운로드 실패');
+      const buf = await res.arrayBuffer();
+      await loadWorkbook(buf);
+    }catch(err){
+      console.error(err); setState('로드 오류'); alert('엑셀을 불러오지 못했습니다. URL/네트워크를 확인하세요.');
+    }
+  });
+
+  // 파일 업로드로 불러오기
+  el('fileInput').addEventListener('change', async (e)=>{
+    const f = e.target.files?.[0];
+    if(!f) return;
+    const buf = await f.arrayBuffer();
+    await loadWorkbook(buf);
+  });
+
+  // PDF 버튼 위임 핸들러
+  $tbody.addEventListener('click', async (e)=>{
+    const btn = e.target.closest('.pdfbtn');
+    if(!btn) return;
+    const po = btn.getAttribute('data-po');
+    if(!po){ alert('발주번호가 없습니다.'); return; }
+    try{
+      setState('PDF 준비중: 수식 재계산…');
+      await generatePDFfromOrderSheet(po);
+      setState('완료');
+    }catch(err){
+      console.error(err);
+      setState('오류');
+      alert('PDF 생성 중 오류가 발생했습니다: ' + err.message);
+    }
+  });
+
+  // 발주서 시트에 C7=발주번호 입력 → xlsx-calc로 재계산 → A1:L109을 표로 그려 html2pdf로 저장
+  async function generatePDFfromOrderSheet(po){
+    if(!workbook || !wbJSON) throw new Error('워크북 미로드');
+    const wsOrder = wbJSON.Sheets[ORDER_SHEET];
+    if(!wsOrder) throw new Error('"발주서" 시트를 찾을 수 없습니다.');
+
+    // C7 셀 주소는 R1C1 기준: C=3, R=7 -> A1 기준은 C7
+    wsOrder['C7'] = wsOrder['C7'] || { t:'s' };
+    wsOrder['C7'].v = String(po);
+
+    // 수식 재계산
+    XLSX_CALC.import_functions({}); // 커스텀 함수 필요시 여기 등록
+    XLSX_CALC.calc(wbJSON);
+
+    // 재계산된 발주서 시트에서 A1:L109 범위를 읽어 표로 그리기
+    const table = renderSheetRangeAsTable(wbJSON.Sheets[ORDER_SHEET], PRINT_RANGE);
+
+    // 페이지 분할: L44, L109 기준 (44행, 109행) → 2페이지 형태
+    // 여기서는 44행 이후에 page-break 추가
+    const rows = table.querySelectorAll('tr');
+    if(rows[43]) rows[43].classList.add('pb'); // 44번째 행 뒤에 페이지 나눔
+
+    const host = el('printHost');
+    host.innerHTML = '';
+    const sheetDiv = document.createElement('div');
+    sheetDiv.className = 'sheetA4';
+    sheetDiv.appendChild(table);
+    host.appendChild(sheetDiv);
+
+    // PDF 저장
+    const opt = {
+      margin:       [0,0,0,0],
+      filename:     `발주서_${safeFile(po)}.pdf`,
+      image:        { type: 'jpeg', quality: 0.98 },
+      html2canvas:  { scale: 2, useCORS: true },
+      jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+    };
+    await html2pdf().from(sheetDiv).set(opt).save();
+  }
+
+  function safeFile(s){ return String(s).replace(/[^\w가-힣\-_.]+/g,'_'); }
+
+  // Sheet 범위를 HTML 표로 변환 (스타일은 단순 테이블, 값은 수식 결과값 반영)
+  function renderSheetRangeAsTable(ws, range){
+    // A1:L109 → 시트의 셀 주소를 순회하여 값을 추출
+    const tbl = document.createElement('table');
+    const tbody = document.createElement('tbody');
+    tbl.appendChild(tbody);
+
+    for(let r=range.s.r; r<=range.e.r; r++){
+      const tr = document.createElement('tr');
+      for(let c=range.s.c; c<=range.e.c; c++){
+        const ref = XLSX.utils.encode_cell({r, c});
+        const cell = ws[ref];
+        const td = document.createElement('td');
+        if(cell){
+          let v = (cell.w || cell.v || '');
+          if(typeof v === 'number'){
+            // 가능한 통화/일자 서식 보정
+            v = formatMaybe(v, cell);
+          }
+          td.textContent = String(v);
+        } else {
+          td.textContent = '';
+        }
+        tr.appendChild(td);
+      }
+      tbody.appendChild(tr);
+    }
+    return tbl;
+  }
+
+  function formatMaybe(v, cell){
+    // 간단한 포맷 감지 (일반/정수/날짜)
+    if(cell && typeof cell.z === 'string'){
+      const z = cell.z.toLowerCase();
+      if(z.includes('yy')||z.includes('dd')||z.includes('mm')){
+        // 날짜 추정: Excel 직렬날짜 → JS 날짜 (1900기준)
+        const date = XLSX.SSF.parse_date_code(v);
+        if(date){
+          const d = new Date(Date.UTC(date.y, (date.m||1)-1, date.d||1));
+          return d.toISOString().slice(0,10);
+        }
+      }
+    }
+    // 정수/금액 추정
+    if(Number.isFinite(v)){
+      if(Math.abs(v)>=1000) return v.toLocaleString('ko-KR');
+      return v;
+    }
+    return v;
+  }
+})();
+</script>
+</body>
+</html>
