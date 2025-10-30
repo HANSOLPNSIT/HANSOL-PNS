@@ -12,11 +12,11 @@
     body{margin:0; background:var(--bg); color:var(--ink);
       font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Noto Sans,Ubuntu,Cantarell,Helvetica Neue,Arial}
     .layout{display:grid; grid-template-columns:260px 1fr; min-height:100vh}
-    .sidebar{background:var(--panel); border-right:1px solid rgba(255,255,255,.06); padding:18px 14px; overflow-y:auto; max-height:100vh; position:sticky; top:0}
+    .sidebar{background:var(--panel); border-right:1px solid rgba(255,255,255,.06); padding:18px 14px; position:sticky; top:0; height:100vh; display:flex; flex-direction:column}
     h1{margin:0 0 12px; font-size:18px; font-weight:800}
     .sub{color:var(--muted); font-size:12px; margin-bottom:14px}
-    .search{width:100%; padding:10px 12px; border-radius:10px; border:1px solid rgba(255,255,255,.08); background:#0b1220; color:var(--ink); margin-bottom:12px}
-    .nav{display:flex; flex-direction:column; gap:8px; margin-top:8px}
+    .search{width:100%; padding:10px 12px; border-radius:10px; border:1px solid rgba(255,255,255,.08); background:#0b1220; color:var(--ink); margin-bottom:12px; flex-shrink:0}
+    .nav{display:flex; flex-direction:column; gap:8px; margin-top:8px; overflow-y:auto; flex:1; min-height:0}
     .nav a{text-decoration:none; color:var(--ink); font-size:14px; padding:10px 10px; border-radius:10px; border:1px solid transparent; display:flex; justify-content:space-between; align-items:center}
     .nav a:hover{background:#0b1220; border-color:rgba(255,255,255,.08)}
     .nav a.active{border-color:#ffffff33; background:#0b1220}
@@ -24,7 +24,7 @@
     .main{position:relative}
     .viewer{position:absolute; inset:0; border:0; width:100%; height:100%; background:#0b1220}
     .topbar{position:sticky; top:0; z-index:1; background:linear-gradient(0deg, rgba(15,23,42,0), rgba(15,23,42,.75)); padding:10px 14px; font-size:12px; color:var(--muted)}
-    .note{font-size:11px; color:var(--muted); margin-top:8px}
+    .note{font-size:11px; color:var(--muted); margin-top:8px; flex-shrink:0}
     @media (max-width:900px){ .layout{grid-template-columns:1fr} .sidebar{position:sticky; top:0; z-index:2} }
   </style>
 </head>
