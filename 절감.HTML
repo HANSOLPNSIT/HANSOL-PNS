@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>절감 대시보드 · PO LIST.xlsx 기반</title>
+  <!-- SheetJS -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <style>
+    :root{
+      --bg:#0f172a; --panel:#111827; --ink:#e5e7eb; --muted:#94a3b8; --accent:#60a5fa; --ok:#22c55e; --warn:#f59e0b; --danger:#ef4444; --border:#1f2937;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--ink);font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,"Noto Sans KR",Apple SD Gothic Neo}
+    .wrap{max-width:1200px;margin:24px auto;padding:0 16px}
+    h1{font-size:22px;margin:0 0 14px}
+    .toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px}
+    .card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:14px}
+    select,input[type="text"],button{background:#0b1220;color:var(--ink);border:1px solid var(--border);padding:8px 10px;border-radius:10px}
+    button{cursor:pointer}
+    button[disabled]{opacity:.5;cursor:not-allowed}
+    .grid{display:grid;grid-template-columns:1.2fr .8fr;gap:14px}
+    .kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:8px}
+    .kpi{background:#0b1220;border:1px dashed var(--border);border-radius:12px;padding:12px}
+    .kpi .t{font-size:12px;color:var(--muted)}
+    .kpi .v{font-size:18px;margin-top:6px}
+    .delta.up{color:var(--ok)}
+    .delta.down{color:var(--danger)}
+    table{width:100%;border-collapse:separate;border-spacing:0 8px}
+    thead th{font-size:12px;text-align:left;color:var(--muted);padding:0 10px}
+    tbody td{background:#0b1220;border:1px solid var(--border);padding:10px;border-left:none;border-right:none}
+    tbody tr{cursor:pointer}
+    tbody tr:hover td{background:#0f1a2e}
+    .pill{display:inline-block;padding:2px 8px;border-radius:999px;border:1px solid var(--border);font-size:12px;color:var(--muted)}
+    .right{float:right;color:var(--muted);font-size:12px}
+    .muted{color:var(--muted)}
+    .mon{width:64px;display:inline-block}
+    .legend{font-size:12px;color:var(--muted)}
+    .sticky{position:sticky;top:0;background:var(--panel);z-index:1;padding-bottom:6px}
+    .footer{margin-top:18px;color:var(--muted);font-size:12px}
+    .details{max-height:380px;overflow:auto}
+    .note{font-size:12px;color:var(--muted);margin-top:6px}
+    .badge{border:1px solid var(--border);padding:2px 6px;border-radius:8px;margin-left:6px;font-size:11px;color:var(--muted)}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>절감 대시보드 <span class="badge">PO LIST.xlsx · PO 시트</span></h1>
+
+    <div class="toolbar card">
+      <label>연도 선택
+        <select id="yearSelect"></select>
+      </label>
+      <span class="legend">선택 연도는 직전 연도와 자동 비교됩니다.</span>
+      <span class="right">기본 경로: <code>./PO%20LIST.xlsx</code></span>
+      <div style="flex:1 1 100%"></div>
+      <label style="display:flex;gap:8px;align-items:center">엑셀 경로(URL)
+        <input type="text" id="fileUrl" placeholder="./PO%20LIST.xlsx" style="width:360px" />
+      </label>
+      <button id="loadBtn">데이터 불러오기</button>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <div class="sticky">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <strong>월별 절감 현황 (선택 연도 vs 직전 연도)</strong>
+            <span class="legend">값이 없는 월은 평균으로 예측치 표시</span>
+          </div>
+          <div class="kpis">
+            <div class="kpi">
+              <div class="t" id="kpiYearLabel">선택 연도 총 절감금액</div>
+              <div class="v" id="kpiThisAmt">-</div>
+              <div class="t">절감율 <span id="kpiThisRate" class="pill">-</span></div>
+            </div>
+            <div class="kpi">
+              <div class="t" id="kpiPrevLabel">직전 연도 총 절감금액</div>
+              <div class="v" id="kpiPrevAmt">-</div>
+              <div class="t">절감율 <span id="kpiPrevRate" class="pill">-</span></div>
+            </div>
+            <div class="kpi">
+              <div class="t">증감 (선택 연도 - 직전 연도)</div>
+              <div class="v" id="kpiDeltaAmt">-</div>
+              <div class="t">절감율 차이 <span id="kpiDeltaRate" class="pill">-</span></div>
+            </div>
+          </div>
+        </div>
+
+        <table id="monthTable">
+          <thead>
+            <tr>
+              <th>월</th>
+              <th>절감금액 (선택연도)</th>
+              <th>절감율 (선택연도)</th>
+              <th>절감금액 (직전연도)</th>
+              <th>절감율 (직전연도)</th>
+              <th>증감액 / 차이율</th>
+              <th>비고</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+        <div class="note">※ (예상)은 해당 연도에서 데이터가 없는 월을, 보유 월 평균으로 보간한 값입니다.</div>
+      </div>
+
+      <div class="card">
+        <strong>선택한 월 상세 (프로젝트/PO 목록)</strong>
+        <div class="details">
+          <table id="detailTable">
+            <thead>
+              <tr>
+                <th>PO 생성일</th>
+                <th>PO번호</th>
+                <th>구매처명</th>
+                <th>구매오더내역</th>
+                <th class="muted">절감금액</th>
+                <th class="muted">절감율</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer">⚙️ 열 이름 매핑(PO 시트): <code>PO 생성일</code>, <code>PO번호</code>, <code>구매처명</code>, <code>구매오더내역</code>, <code>절감금액</code>, <code>절감율</code>. 헤더는 1행에 위치해야 합니다.</div>
+  </div>
+
+<script>
+const $ = (sel)=>document.querySelector(sel);
+const fmtWon = (n)=> isFinite(n) ? new Intl.NumberFormat('ko-KR').format(Math.round(n)) + '원' : '-';
+const fmtPct = (x)=> (x==null||!isFinite(x))? '-' : ( (x*100).toFixed(1).replace(/\.0$/,'') + '%');
+const clampYear = (y)=> Math.min(2030, Math.max(2021, y));
+
+// 연도 선택 초기화
+(function initYear(){
+  const ySel = $('#yearSelect');
+  for(let y=2021;y<=2030;y++){
+    const opt = document.createElement('option');
+    opt.value = y; opt.textContent = y + '년';
+    if(y===new Date().getFullYear()) opt.selected = true;
+    ySel.appendChild(opt);
+  }
+})();
+
+$('#fileUrl').value = './PO%20LIST.xlsx';
+
+// 이벤트
+$('#loadBtn').addEventListener('click', () => {
+  loadAndRender();
+});
+$('#yearSelect').addEventListener('change', () => {
+  if(window.__ROWS) renderAll(window.__ROWS);
+});
+
+async function loadAndRender(){
+  const url = ($('#fileUrl').value || './PO%20LIST.xlsx').trim();
+  try{
+    const res = await fetch(url);
+    if(!res.ok) throw new Error('엑셀을 가져올 수 없습니다: ' + res.status);
+    const ab = await res.arrayBuffer();
+    const wb = XLSX.read(ab, {type:'array'});
+    const sheet = wb.Sheets['PO'] || wb.Sheets[wb.SheetNames[0]];
+    if(!sheet) throw new Error('PO 시트를 찾을 수 없습니다.');
+    const rows = XLSX.utils.sheet_to_json(sheet, {defval:null, raw:true});
+    window.__ROWS = rows;
+    renderAll(rows);
+  }catch(err){
+    alert('로드 오류: ' + err.message);
+    console.error(err);
+  }
+}
+
+function normRate(v){
+  if(v==null || v==='') return null;
+  if(typeof v === 'string'){
+    const s = v.replace(/\s+/g,'').replace('%','');
+    const num = parseFloat(s);
+    if(!isFinite(num)) return null;
+    return num > 1 ? (num/100) : num; // "10" or "10%" => 0.10
+  }
+  if(typeof v === 'number'){
+    return v > 1 ? v/100 : v;
+  }
+  return null;
+}
+
+function excelDateToJS(v){
+  // SheetJS가 날짜를 숫자(엑셀 직렬값)로 줄 수 있음
+  if(v==null) return null;
+  if (typeof v === 'number'){
+    // Excel epoch: 1899-12-30
+    const epoch = new Date(Date.UTC(1899,11,30));
+    const ms = v * 24*3600*1000;
+    return new Date(epoch.getTime()+ms);
+  }
+  const d = new Date(v);
+  return isNaN(d) ? null : d;
+}
+
+function monthKey(y,m){ return `${y}-${String(m).padStart(2,'0')}` }
+
+function aggregate(rows, targetYear){
+  // 월별 집계: 금액 합계, 베이스금액(=절감금액/절감율) 합계 -> 연율 산출
+  const byYM = new Map();
+  const pick = (r, k)=> r[k] ?? r[k.toUpperCase?.()] ?? r[k.toLowerCase?.()];
+
+  for(const r of rows){
+    const d = excelDateToJS(pick(r, 'PO 생성일'));
+    if(!d) continue;
+    const y = d.getFullYear();
+    const m = d.getMonth()+1;
+
+    const amtRaw = pick(r, '절감금액');
+    const rateRaw = pick(r, '절감율');
+
+    let amt = (typeof amtRaw==='string')? Number(amtRaw.replace(/[^\d.-]/g,'')) : (amtRaw??0);
+    if(!isFinite(amt)) amt=0;
+    const rate = normRate(rateRaw);
+    const base = (rate && rate>0) ? (amt / rate) : null;
+
+    const key = monthKey(y,m);
+    if(!byYM.has(key)) byYM.set(key, {y,m, amt:0, base:0, baseCnt:0, rows:[]});
+    const b = byYM.get(key);
+    b.amt += amt;
+    if(base!=null && isFinite(base)) { b.base += base; b.baseCnt++; }
+    b.rows.push(r);
+  }
+
+  // 선택연도/직전연도 배열 준비 (1..12)
+  const thisYear = Array.from({length:12}, (_,i)=>({y:targetYear,m:i+1, amt:null, base:null, rows:[]}));
+  const prevYear = Array.from({length:12}, (_,i)=>({y:targetYear-1,m:i+1, amt:null, base:null, rows:[]}));
+
+  for(const [k, obj] of byYM.entries()){
+    const y = obj.y, m = obj.m;
+    const rate = (obj.base>0)? (obj.amt/obj.base) : null;
+    const item = { y, m, amt: obj.amt, base: obj.base>0?obj.base:null, rate, rows: obj.rows };
+    if(y===targetYear) thisYear[m-1]=item;
+    if(y===targetYear-1) prevYear[m-1]=item;
+  }
+
+  // 결측 월 예측치(보간): 해당 연도 내 보유 월 평균으로 채움
+  function fillForecast(arr){
+    const known = arr.filter(x=>x.amt!=null && x.base!=null);
+    const meanAmt = known.length? known.reduce((a,c)=>a+c.amt,0)/known.length : null;
+    const meanRate = known.length? known.reduce((a,c)=>a+(c.rate??0),0)/known.length : null;
+    const meanBase = (meanAmt!=null && meanRate!=null && meanRate>0)? (meanAmt/meanRate) : null;
+    return arr.map(x=>{
+      if(x.amt==null){
+        return { ...x, amt: meanAmt??0, base: meanBase??0, rate: meanRate??null, rows: [], forecast:true };
+      } else {
+        return { ...x, forecast:false };
+      }
+    });
+  }
+
+  return { thisYear: fillForecast(thisYear), prevYear: fillForecast(prevYear) };
+}
+
+function totals(arr){
+  const sumAmt = arr.reduce((a,c)=>a + (c.amt||0), 0);
+  const sumBase = arr.reduce((a,c)=>a + (c.base||0), 0);
+  const rate = sumBase>0 ? (sumAmt/sumBase) : null;
+  return { sumAmt, sumBase, rate };
+}
+
+function renderAll(rows){
+  const year = clampYear(parseInt($('#yearSelect').value,10));
+  const { thisYear, prevYear } = aggregate(rows, year);
+
+  // KPI
+  const t1 = totals(thisYear);
+  const t2 = totals(prevYear);
+  $('#kpiYearLabel').textContent = `${year}년 총 절감금액`;
+  $('#kpiPrevLabel').textContent = `${year-1}년 총 절감금액`;
+  $('#kpiThisAmt').textContent = fmtWon(t1.sumAmt);
+  $('#kpiThisRate').textContent = fmtPct(t1.rate);
+  $('#kpiPrevAmt').textContent = fmtWon(t2.sumAmt);
+  $('#kpiPrevRate').textContent = fmtPct(t2.rate);
+  const dAmt = t1.sumAmt - t2.sumAmt;
+  const dRate = ( (t1.rate??0) - (t2.rate??0) );
+  $('#kpiDeltaAmt').innerHTML = `${fmtWon(dAmt)} <span class="delta ${dAmt>=0?'up':'down'}">${dAmt>=0?'▲':'▼'}</span>`;
+  $('#kpiDeltaRate').innerHTML = `${fmtPct(dRate)} <span class="delta ${dRate>=0?'up':'down'}">${dRate>=0?'▲':'▼'}</span>`;
+
+  // 월 테이블
+  const tbody = $('#monthTable tbody');
+  tbody.innerHTML = '';
+  for(let i=0;i<12;i++){
+    const a = thisYear[i];
+    const b = prevYear[i];
+    const tr = document.createElement('tr');
+    tr.dataset.y = a.y; tr.dataset.m = a.m;
+    tr.innerHTML = `
+      <td><span class="mon">${a.m}월</span></td>
+      <td>${fmtWon(a.amt)} ${a.forecast?'<span class="pill">예상</span>':''}</td>
+      <td>${fmtPct(a.rate)}</td>
+      <td>${fmtWon(b.amt)} ${b.forecast?'<span class="pill">예상</span>':''}</td>
+      <td>${fmtPct(b.rate)}</td>
+      <td>${fmtWon((a.amt||0)-(b.amt||0))} / ${fmtPct((a.rate??0)-(b.rate??0))}</td>
+      <td class="muted">클릭 시 상세</td>
+    `;
+    tr.addEventListener('click', ()=> showDetails(a.y, a.m));
+    tbody.appendChild(tr);
+  }
+
+  // 기본 상세: 1월 표시
+  showDetails(year, 1);
+}
+
+function showDetails(year, month){
+  const tbody = $('#detailTable tbody');
+  tbody.innerHTML = '';
+  const rows = (window.__ROWS||[]);
+  const pick = (r, k)=> r[k] ?? r[k.toUpperCase?.()] ?? r[k.toLowerCase?.()];
+  const filtered = rows.filter(r=>{
+    const d = excelDateToJS(pick(r,'PO 생성일'));
+    return d && d.getFullYear()===year && (d.getMonth()+1)===month;
+  });
+  if(!filtered.length){
+    const tr = document.createElement('tr');
+    const td = document.createElement('td');
+    td.colSpan = 6; td.className='muted';
+    td.textContent = '해당 월 데이터가 없습니다.';
+    tr.appendChild(td); tbody.appendChild(tr);
+    return;
+  }
+  for(const r of filtered){
+    const d = excelDateToJS(pick(r,'PO 생성일'));
+    const po = pick(r,'PO번호');
+    const vend = pick(r,'구매처명');
+    const line = pick(r,'구매오더내역');
+    const amtRaw = pick(r,'절감금액');
+    let amt = (typeof amtRaw==='string')? Number(amtRaw.replace(/[^\d.-]/g,'')) : (amtRaw??0);
+    if(!isFinite(amt)) amt=0;
+    const rate = normRate(pick(r,'절감율'));
+
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${d? d.toISOString().slice(0,10) : ''}</td>
+      <td>${po??''}</td>
+      <td>${vend??''}</td>
+      <td>${line??''}</td>
+      <td class="muted">${fmtWon(amt)}</td>
+      <td class="muted">${fmtPct(rate)}</td>
+    `;
+    tbody.appendChild(tr);
+  }
+}
+
+// 자동 로드 시도
+// loadAndRender(); // 필요 시 주석 해제
+</script>
+</body>
+</html>
