@@ -7,17 +7,20 @@
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
   <style>
-    :root { --bg:#0f172a; --panel:#111827; --ink:#e5e7eb; --muted:#9ca3af; --brand:#60a5fa; --border:#1f2937; }
+    :root {
+      --bg:#0f172a; --panel:#111827; --ink:#e5e7eb; --muted:#9ca3af;
+      --brand:#60a5fa; --border:#1f2937;
+    }
     *{box-sizing:border-box;}
     body{margin:0;background:var(--bg);color:var(--ink);
       font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,"Apple SD Gothic Neo","Noto Sans KR","Malgun Gothic",sans-serif;}
     header{padding:18px 24px;border-bottom:1px solid var(--border);
-      background:linear-gradient(180deg,#0f172a 0%, #0b1222 100%);}
+      background:linear-gradient(180deg,#0f172a 0%, #0b1222 100%);}    
     h1{margin:0 0 6px;font-size:18px;}
     .wrap{display:grid;grid-template-columns:360px 1fr;gap:16px;padding:18px 24px;}
     .card{background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:16px;}
     label{display:block;margin:8px 0 6px;color:var(--muted);font-size:13px;}
-    select,button{width:100%;padding:10px 12px;border-radius:12px;border:1px solid #374151;background:#0b1222;color:var(--ink);}
+    select,button{width:100%;padding:10px 12px;border-radius:12px;border:1px solid #374151;background:#0b1222;color:var(--ink);}    
     .row{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
     #plot{height:66vh;}
     .hint{color:var(--muted);font-size:12px;margin-top:6px;line-height:1.4;}
@@ -27,7 +30,7 @@
     .def-table thead th{background:#0d1526;color:var(--muted);font-weight:600;font-size:12px}
     .callout{margin-top:10px;font-size:13px;color:var(--muted)}
     .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace}
-    .btn{display:flex;align-items:center;justify-content:center;height:42px;padding:10px 12px;border-radius:12px;border:1px solid #374151;background:#0b1222;color:#e5e7eb;cursor:pointer;transition:.2s}
+    .btn{display:flex;align-items:center;justify-content:center;height:42px;padding:10px 12px;border-radius:12px;border:1px solid #374151;background:#0b1222;color:var(--ink);cursor:pointer;transition:.2s}
     .btn:hover{background:#1a253b;border-color:#4b5563}
   </style>
 </head>
@@ -35,15 +38,14 @@
   <header>
     <h1>외주용역 박스플롯</h1>
     <div class="hint">
-      조건(드롭다운): <span class="badge">대분류 = "분류"(P 헤더)</span> · X축: <span class="badge">서비스등급 = "서비스 등급내역"(U 헤더)</span> · Y축:
-      <span class="badge">서비스단가 = "서비스단가"(Z 헤더)</span> · 범위: <span class="badge">477–1000행(비어있으면 무시)</span>
+      조건(드롭다운): <span class="badge">대분류=P열(분류)</span> · X축: <span class="badge">서비스등급=U열(서비스 등급내역)</span> · Y축:
+      <span class="badge">서비스단가=Z열(원 단위)</span> · 범위: <span class="badge">477–1000행(비어있으면 무시)</span>
     </div>
   </header>
 
   <div class="wrap">
-    <!-- 좌측 설정 -->
     <section class="card">
-      <label>대분류(분류) 선택</label>
+      <label>대분류(분류 · P열) 선택</label>
       <select id="category"></select>
 
       <label style="margin-top:14px;">옵션</label>
@@ -59,34 +61,50 @@
       </div>
 
       <div class="hint" style="margin-top:10px;">
-        ※ 헤더의 공백/대소문자는 자동 보정합니다. 예: “서비스 등급내역”, “서비스등급내역”, “서비스등급”.
+        ※ 헤더가 있을 경우, <span class="mono">분류(P)</span> / <span class="mono">서비스 등급내역(U)</span> / <span class="mono">서비스단가(Z)</span> 를 자동 매핑합니다.
       </div>
-      <button id="loadDefault" class="btn" style="margin-top:12px;">DATA.xlsx 자동 로드</button>
+      <button id="loadDefault" class="btn" style="margin-top:12px;">기본 파일(data.xlsx) 자동 로드</button>
     </section>
 
-    <!-- 우측 차트 -->
     <section class="card">
       <div id="plot"></div>
     </section>
   </div>
 
-  <!-- (선택) 설명 섹션 -->
   <div class="wrap" style="padding-top:0;">
     <section class="card" style="grid-column:1 / -1;">
       <h2 style="margin:0 0 10px;font-size:16px;">📦 박스플롯(Box Plot) 정의</h2>
       <p class="callout">
         박스플롯은 데이터의 분포를 <strong>사분위수(Quartiles)</strong> 중심으로 요약해 보여주는 도구입니다.
-        중앙값(Q2), <strong>IQR = Q3 − Q1</strong>, <strong>수염(whisker)</strong>을 통해 중심·산포·이상치 여부를 파악합니다.
+        중앙값(제2사분위수, Q2), <strong>사분위범위(IQR = Q3 − Q1)</strong>, 그리고 <strong>수염(whisker)</strong>을 통해
+        중심·산포·이상치(outlier) 여부를 한눈에 파악할 수 있습니다.
       </p>
+
+      <h3 style="margin:14px 0 6px;font-size:15px;">📊 박스플롯의 구성 요소</h3>
       <table class="def-table">
-        <thead><tr><th style="width:80px">구분</th><th style="width:160px">이름</th><th>의미</th><th style="width:180px">계산 방법</th></tr></thead>
+        <thead>
+          <tr>
+            <th style="width:80px">구분</th>
+            <th style="width:160px">이름</th>
+            <th>의미</th>
+            <th style="width:180px">계산 방법</th>
+          </tr>
+        </thead>
         <tbody>
-          <tr><td>Q1</td><td>제1사분위수</td><td>하위 25% 지점</td><td>25번째 백분위수</td></tr>
-          <tr><td>Q2</td><td>중앙값</td><td>중간값</td><td>50번째 백분위수</td></tr>
-          <tr><td>Q3</td><td>제3사분위수</td><td>상위 25% 직전</td><td>75번째 백분위수</td></tr>
-          <tr><td>IQR</td><td>사분위범위</td><td>중앙 50% 범위</td><td>Q3 − Q1</td></tr>
+          <tr><td>Q1</td><td>제1사분위수</td><td>전체 데이터 중 하위 25% 지점</td><td>25번째 백분위수</td></tr>
+          <tr><td>Q2</td><td>제2사분위수 (중앙값)</td><td>전체 데이터의 중간값</td><td>50번째 백분위수</td></tr>
+          <tr><td>Q3</td><td>제3사분위수</td><td>전체 데이터 중 상위 25% 직전 지점</td><td>75번째 백분위수</td></tr>
+          <tr><td>IQR</td><td>사분위범위</td><td>중앙 50% 데이터 범위</td><td>IQR = Q3 − Q1</td></tr>
         </tbody>
       </table>
+
+      <ul class="callout" style="margin:10px 0 0; padding-left:18px;">
+        <li>박스의 <strong>아래 끝</strong> = <span class="mono">Q1</span></li>
+        <li>박스의 <strong>중앙선</strong> = <span class="mono">Q2 (Median)</span></li>
+        <li>박스의 <strong>위 끝</strong> = <span class="mono">Q3</span></li>
+        <li><strong>수염(whisker)</strong>는 보통 <span class="mono">Q1 − 1.5×IQR</span> 부터 <span class="mono">Q3 + 1.5×IQR</span> 사이의 실제 관측값까지 뻗습니다.</li>
+        <li>이 범위를 벗어난 점들은 일반적으로 <strong>이상치(outlier)</strong>로 표시됩니다.</li>
+      </ul>
     </section>
   </div>
 
@@ -94,17 +112,14 @@
     // --- 고정 X축 순서 ---
     const GRADE_ORDER = ['초급','중급','고급','특급','컨설턴트'];
 
-    // --- 설정 상수 ---
+    // --- 설정 상수 (기본값) ---
     const EXCEL_SHEET_NAME = "외주용역"; // 시트명
     const ROW_START = 477; // 포함 (엑셀 1-based)
     const ROW_END   = 1000; // 포함 (엑셀 1-based)
-
-    // 헤더명 매칭(공백/대소문자 무시)
-    const HEADER_MAP = {
-      P: ['분류'],
-      U: ['서비스 등급내역','서비스등급내역','서비스등급'],
-      Z: ['서비스단가']
-    };
+    // 기본(폴백) 인덱스: P(15), U(20), Z(25) — 헤더 자동매핑 실패 시 사용
+    let COL_P_IDX = 15;  // P열 = 0-based 15 (분류)
+    let COL_U_IDX = 20;  // U열 = 0-based 20 (서비스 등급내역)
+    let COL_Z_IDX = 25;  // Z열 = 0-based 25 (서비스단가)
 
     const els = {
       loadDefault: document.getElementById('loadDefault'),
@@ -117,11 +132,10 @@
     let state = {
       headers: [],
       rows: [],
-      idx: { P:null, U:null, Z:null },
       categoryValues: [],
     };
 
-    // ===== 로드 공통 =====
+    // ===== (선택) 자동 로드: 같은 폴더의 data.xlsx 시도 =====
     async function loadWorkbookFromArrayBuffer(ab) {
       const wb = XLSX.read(ab, { type: 'array' });
       const sheetName = wb.Sheets[EXCEL_SHEET_NAME] ? EXCEL_SHEET_NAME : wb.SheetNames[0];
@@ -129,115 +143,82 @@
       return XLSX.utils.sheet_to_json(ws, { header:1, raw:true, defval:null });
     }
 
-    const norm = s => String(s ?? '').replace(/\s+/g,'').toLowerCase();
-    function findHeaderIndex(headers, candidates){
-      const hnorm = headers.map(norm);
-      for (const name of candidates){
-        const j = hnorm.indexOf(norm(name));
-        if (j !== -1) return j;
-      }
-      return -1;
-    }
-
-    function showLoadError(tried) {
-      const list = tried.map(u => `<li style="word-break:break-all">${u}</li>`).join('');
-      els.plot.innerHTML =
-        `<div style="padding:12px;color:#9ca3af;line-height:1.5">
-           <div style="margin-bottom:6px">DATA.xlsx 자동 로드에 실패했습니다.</div>
-           <div style="margin-bottom:6px">다음 경로들을 시도했습니다:</div>
-           <ul style="margin:0 0 8px 16px;">${list}</ul>
-           <div style="font-size:12px">
-             점검: (1) 파일명 대/소문자, (2) GitHub Pages 브랜치(main/master/gh-pages)에 파일 존재 여부,
-             (3) 저장소가 Public인지, (4) 페이지와 동일 경로 폴더에 파일이 있는지 확인해주세요.
-           </div>
-         </div>`;
-    }
-
-    // ===== 기본 파일(DATA.xlsx 등) 자동 로드 (GitHub raw 폴백 지원) =====
     async function tryLoadDefault() {
-      const tried = [];
-
-      // 1) 같은 폴더 상대 경로 우선 시도
-      const localNames = ['DATA.xlsx','DATA.XLSX','Data.xlsx','data.xlsx'];
-      const basePath = location.origin + location.pathname.replace(/[^/]*$/, '');
-      for (const name of localNames) {
-        const url = name;
-        tried.push(basePath + name);
-        try {
-          const res = await fetch(url, { cache:'no-store' });
-          if (!res.ok) throw new Error('HTTP ' + res.status);
-          const ab = await res.arrayBuffer();
-          const rows = await loadWorkbookFromArrayBuffer(ab);
-          ingestRows(rows);
-          return;
-        } catch (e) { /* 계속 시도 */ }
-      }
-
-      // 2) GitHub Pages일 경우 raw 경로 폴백 (브랜치/파일명/경로 변형 모두 시도)
-      if (location.hostname.endsWith('github.io')) {
-        const user = location.hostname.split('.')[0];
-        const parts = location.pathname.split('/').filter(Boolean); // [repo, ...subdirs..., maybe file]
-        const repo = parts[0] || '';
-        // repo 이하 경로(페이지가 /repo/sub/.. 라면 sub/... 전체 보존)
-        const subPath = parts.slice(1).join('/'); // 파일이 있는 폴더 경로로 가정
-        const branches = ['main','master','gh-pages'];
-        const filenames = ['DATA.xlsx','DATA.XLSX','Data.xlsx','data.xlsx'];
-
-        for (const br of branches) {
-          for (const fn of filenames) {
-            const raw = `https://raw.githubusercontent.com/${user}/${repo}/${br}/${subPath ? subPath + '/' : ''}${fn}?ts=${Date.now()}`;
-            tried.push(raw);
-            try {
-              const res = await fetch(raw, { cache:'no-store' });
-              if (!res.ok) throw new Error('HTTP ' + res.status);
-              const ab = await res.arrayBuffer();
-              const rows = await loadWorkbookFromArrayBuffer(ab);
-              ingestRows(rows);
-              return;
-            } catch (e) { /* 다음 후보 계속 */ }
+      try {
+        const res = await fetch('data.xlsx', { cache:'no-store' });
+        if (!res.ok) throw new Error();
+        const ab = await res.arrayBuffer();
+        const rows = await loadWorkbookFromArrayBuffer(ab);
+        ingestRows(rows);
+      } catch {
+        if (location.hostname.endsWith('github.io')) {
+          const user = location.hostname.split('.')[0];
+          const parts = location.pathname.split('/').filter(Boolean);
+          const repo = parts[0] || '';
+          const branch = 'main';
+          const dir = parts.slice(1, -1).join('/');
+          const url = `https://raw.githubusercontent.com/${user}/${repo}/${branch}/${dir ? dir + '/' : ''}data.xlsx?ts=${Date.now()}`;
+          try {
+            const res2 = await fetch(url, { cache:'no-store' });
+            if (!res2.ok) throw new Error();
+            const ab2 = await res2.arrayBuffer();
+            const rows2 = await loadWorkbookFromArrayBuffer(ab2);
+            ingestRows(rows2);
+            return;
+          } catch {
+            els.plot.innerHTML = '<div style="padding:12px;color:#9ca3af;">data.xlsx 자동 로드에 실패했습니다. 저장소 경로나 파일 위치를 확인해주세요.</div>';
           }
         }
       }
-      showLoadError(tried);
     }
 
-    // ===== 데이터 주입/그리기 =====
+    // === 유틸: 헤더명 정규화 ===
+    function normHeader(v){
+      return String(v ?? '').trim().replaceAll(/\s+/g,'').toLowerCase();
+    }
+
+    function autoMapColumns(headerRow){
+      if (!headerRow?.length) return; // 폴백 유지
+      const hnorm = headerRow.map(normHeader);
+      // 허용 별칭: 공백 유무 고려
+      const idxP = hnorm.indexOf('분류');
+      const idxU = (()=>{
+        const cands = ['서비스등급내역','서비스등급','등급','서비스등급(내역)'].map(s=>s.replaceAll(/\s+/g,'').toLowerCase());
+        for (const c of cands){
+          const i = hnorm.indexOf(c);
+          if (i !== -1) return i;
+        }
+        return -1;
+      })();
+      const idxZ = hnorm.indexOf('서비스단가');
+
+      if (idxP !== -1) COL_P_IDX = idxP;
+      if (idxU !== -1) COL_U_IDX = idxU;
+      if (idxZ !== -1) COL_Z_IDX = idxZ;
+    }
+
+    // 행 데이터 주입
     function ingestRows(rows) {
       if (!rows?.length) {
         alert('시트가 비어있습니다.');
         return;
       }
       const first = rows[0] || [];
-      const headerLike = first.some(v => typeof v === 'string' && String(v).trim() !== '');
-      if (!headerLike) {
-        alert('헤더 행을 찾을 수 없습니다. 1행에 "분류 / 서비스 등급내역 / 서비스단가" 헤더가 있어야 합니다.');
-        return;
-      }
+      const headerLike = first.some(v => typeof v === 'string');
+      const headerRow = headerLike ? first : [];
+      const data = headerLike ? rows.slice(1) : rows.slice();
 
-      const headerRow = first;
-      const data = rows.slice(1);
+      // 헤더 자동 매핑 시도
+      if (headerLike) autoMapColumns(headerRow);
 
-      // 범위 슬라이싱 (1-based 행번호 기준 477~1000) → 0-based 인덱스(헤더 제외)로 변환
-      const startIdx = ROW_START - 2;
-      const endIdx   = ROW_END   - 2;
+      const startIdx = ROW_START - 1 - (headerLike ? 1 : 0);
+      const endIdx   = ROW_END   - 1 - (headerLike ? 1 : 0);
       const slice = data.filter((_, i) => i >= startIdx && i <= endIdx);
 
       state.rows = slice;
-      state.headers = headerRow.slice();
+      state.headers = headerRow.length ? headerRow : generateFallbackHeaders(rows[0]?.length || guessMaxCols(slice));
 
-      // 동적 컬럼 인덱스 매핑
-      const pIdx = findHeaderIndex(state.headers, HEADER_MAP.P);
-      const uIdx = findHeaderIndex(state.headers, HEADER_MAP.U);
-      const zIdx = findHeaderIndex(state.headers, HEADER_MAP.Z);
-
-      if (pIdx < 0 || uIdx < 0 || zIdx < 0) {
-        alert(`필수 헤더 누락:\n- 분류: ${pIdx<0?'없음':'OK'}\n- 서비스 등급내역: ${uIdx<0?'없음':'OK'}\n- 서비스단가: ${zIdx<0?'없음':'OK'}`);
-        return;
-      }
-      state.idx = { P:pIdx, U:uIdx, Z:zIdx };
-
-      // 카테고리(분류) 목록 구성
-      const pVals = slice.map(r => r[pIdx]).filter(v => v != null && String(v).trim() !== '');
+      const pVals = slice.map(r => r[COL_P_IDX]).filter(v => v != null && String(v).trim() !== '');
       state.categoryValues = Array.from(new Set(pVals.map(v => String(v)))).sort((a,b)=>a.localeCompare(b,'ko'));
 
       populateCategorySelect();
@@ -247,6 +228,10 @@
 
       draw();
     }
+
+    function guessMaxCols(rows){ return Math.max(0, ...rows.map(r => Array.isArray(r) ? r.length : 0)); }
+    function generateFallbackHeaders(n){ const a=[]; for(let i=0;i<n;i++) a.push(columnLabel(i)); return a; }
+    function columnLabel(idx){ let s='',n=idx; while(n>=0){ s=String.fromCharCode((n%26)+65)+s; n=Math.floor(n/26)-1; } return s; }
 
     function populateCategorySelect(){
       els.category.innerHTML = '';
@@ -267,7 +252,6 @@
 
     function draw(){
       if (!state.rows.length){ Plotly.purge(els.plot); return; }
-      const {P:COL_P_IDX, U:COL_U_IDX, Z:COL_Z_IDX} = state.idx;
       const catSel = els.category.value;
       const orient = els.orientation.value;
       const showOutliers = els.outliers.value !== 'none';
@@ -280,7 +264,6 @@
         return (catSel==='__ALL__') || String(p)===catSel;
       });
 
-      // 등급별 그룹화
       const byGrade = new Map();
       for (const r of filtered){
         const g=String(r[COL_U_IDX]).trim();
@@ -290,7 +273,7 @@
       }
 
       const traces=[];
-      const metricName = state.headers[COL_Z_IDX] ?? '서비스단가';
+      const metricName = state.headers[COL_Z_IDX] ?? `열 ${columnLabel(COL_Z_IDX)}`;
 
       for (const g of GRADE_ORDER){
         const arr=(byGrade.get(g)||[]).filter(Number.isFinite);
@@ -326,15 +309,14 @@
       const layout={
         paper_bgcolor:'#0f172a', plot_bgcolor:'#0f172a', font:{color:'#e5e7eb'},
         margin:{t:48,r:24,b:72,l:84}, showlegend:false,
-        title:`${titleCat} · Y축: ${metricName}`
+        title:`${titleCat} · Y축: ${metricName} (Z열)`
       };
-      if (orient==='v'){ layout.xaxis={title:'서비스 등급내역',...catAxis}; layout.yaxis=numericAxis; }
-      else { layout.xaxis=numericAxis; layout.yaxis={title:'서비스 등급내역',...catAxis}; }
+      if (orient==='v'){ layout.xaxis={title:'서비스등급 (U열)',...catAxis}; layout.yaxis=numericAxis; }
+      else { layout.xaxis=numericAxis; layout.yaxis={title:'서비스등급 (U열)',...catAxis}; }
 
       Plotly.react(els.plot, traces, layout, {responsive:true, displaylogo:false});
     }
 
-    // 이벤트 바인딩/최초 로드
     els.loadDefault.addEventListener('click', tryLoadDefault);
     tryLoadDefault();
   </script>
