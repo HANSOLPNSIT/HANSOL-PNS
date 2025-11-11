@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>외주용역 박스플롯 · 분류별 & 업체별 나란히</title>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <style>
+    :root { --bg:#0f172a; --panel:#111827; --ink:#e5e7eb; --muted:#9ca3af; --brand:#60a5fa; --border:#1f2937; }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--ink);font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,"Apple SD Gothic Neo","Noto Sans KR","Malgun Gothic",sans-serif}
+    header{padding:18px 24px;border-bottom:1px solid var(--border);background:linear-gradient(180deg,#0f172a 0%, #0b1222 100%)}
+    h1{margin:0 0 6px;font-size:18px}
+    .wrap{display:grid;grid-template-columns:360px 1fr;gap:16px;padding:18px 24px}
+    .card{background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:16px}
+    label{display:block;margin:8px 0 6px;color:var(--muted);font-size:13px}
+    select,button{width:100%;padding:10px 12px;border-radius:12px;border:1px solid #374151;background:#0b1222;color:var(--ink)}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    #plot{height:70vh}
+    .hint{color:var(--muted);font-size:12px;margin-top:6px;line-height:1.4}
+    .badge{display:inline-block;padding:2px 8px;border-radius:9999px;font-size:11px;background:#0b2546;color:#b9dcff;border:1px solid #1f3b66}
+    .def-table{width:100%;border-collapse:collapse;margin-top:8px;background:#0b1222;border:1px solid var(--border);border-radius:12px;overflow:hidden}
+    .def-table th,.def-table td{padding:10px 8px;border-bottom:1px solid var(--border);font-size:14px;text-align:left}
+    .def-table thead th{background:#0d1526;color:var(--muted);font-weight:600;font-size:12px}
+    .callout{margin-top:10px;font-size:13px;color:var(--muted)}
+    .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace}
+    .btn{display:flex;align-items:center;justify-content:center;height:42px;padding:10px 12px;border-radius:12px;border:1px solid #374151;background:#0b1222;color:#e5e7eb;cursor:pointer;transition:.2s}
+    .btn:hover{background:#1a253b;border-color:#4b5563}
+    .section-title{margin:0 0 8px;font-size:15px;font-weight:600}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>외주용역 박스플롯</h1>
+    <div class="hint">
+      조건(행 이름 자동매핑): 대분류=‘분류’ 셀 · X축=‘서비스 등급내역’ 셀 · Y축=‘서비스단가’
+      <span class="badge">서비스단가</span> · 범위: <span class="badge">477–1000행(비어있으면 무시)</span>
+    </div>
+  </header>
+
+  <div class="wrap">
+    <section class="card">
+      <div class="section-title">컨트롤</div>
+      <label>대분류(분류 · P열) 선택</label>
+      <select id="category"></select>
+
+      <label style="margin-top:14px;">업체(구매처명) 선택</label>
+      <select id="vendor"></select>
+
+      <label style="margin-top:14px;">옵션</label>
+      <div class="row">
+        <select id="orientation">
+          <option value="v" selected>수직 박스(서비스등급 = X축)</option>
+          <option value="h">수평 박스(서비스등급 = Y축)</option>
+        </select>
+        <select id="outliers">
+          <option value="none" selected>이상치 숨김</option>
+          <option value="suspected">이상치 표시</option>
+        </select>
+      </div>
+
+      <div class="hint" style="margin-top:10px;">
+        ※ 헤더가 있을 경우, <span class="mono">분류(P)</span> / <span class="mono">서비스 등급내역(U)</span> / <span class="mono">서비스단가(Z)</span> / <span class="mono">구매처명</span> 을 자동 매핑합니다.
+      </div>
+      <button id="loadDefault" class="btn" style="margin-top:12px;">기본 파일(data.xlsx) 자동 로드</button>
+    </section>
+
+    <section class="card">
+      <div class="section-title">분류별 vs 업체별 · 한 화면 비교</div>
+      <div id="plot"></div>
+    </section>
+  </div>
+
+  <div class="wrap" style="grid-template-columns:1fr; padding-top:0;">
+    <section class="card">
+      <h2 style="margin:0 0 10px;font-size:16px;">📦 박스플롯(Box Plot) 정의</h2>
+      <p class="callout">
+        박스플롯은 데이터의 분포를 <strong>사분위수(Quartiles)</strong> 중심으로 요약해 보여주는 도구입니다.
+        중앙값(제2사분위수, Q2), <strong>사분위범위(IQR = Q3 − Q1)</strong>, 그리고 <strong>수염(whisker)</strong>을 통해
+        중심·산포·이상치(outlier) 여부를 한눈에 파악할 수 있습니다.
+      </p>
+    </section>
+  </div>
+
+  <script>
+    // --- 고정 X축 순서 ---
+    const GRADE_ORDER = ['초급','중급','고급','특급','컨설턴트'];
+
+    // --- 설정 상수 (기본값) ---
+    const EXCEL_SHEET_NAME = "외주용역"; // 시트명
+    const ROW_START = 477; // 포함 (엑셀 1-based)
+    const ROW_END   = 1000; // 포함 (엑셀 1-based)
+    // 기본(폴백) 인덱스: P(15), U(20), Z(25)
+    let COL_P_IDX = 15;  // P열 = 0-based 15 (분류)
+    let COL_U_IDX = 20;  // U열 = 0-based 20 (서비스 등급내역)
+    let COL_Z_IDX = 25;  // Z열 = 0-based 25 (서비스단가)
+    let COL_VENDOR_IDX = -1; // 헤더 자동매핑 기대: 구매처명
+
+    const els = {
+      loadDefault: document.getElementById('loadDefault'),
+      category: document.getElementById('category'),
+      vendor: document.getElementById('vendor'),
+      orientation: document.getElementById('orientation'),
+      outliers: document.getElementById('outliers'),
+      plot: document.getElementById('plot'),
+    };
+
+    let state = { headers: [], rows: [], categoryValues: [], vendorValues: [] };
+
+    // ===== (선택) 자동 로드: 같은 폴더의 data.xlsx 시도 =====
+    async function loadWorkbookFromArrayBuffer(ab) {
+      const wb = XLSX.read(ab, { type: 'array' });
+      const sheetName = wb.Sheets[EXCEL_SHEET_NAME] ? EXCEL_SHEET_NAME : wb.SheetNames[0];
+      const ws = wb.Sheets[sheetName];
+      return XLSX.utils.sheet_to_json(ws, { header:1, raw:true, defval:null });
+    }
+
+    async function tryLoadDefault() {
+      try {
+        const res = await fetch('data.xlsx', { cache:'no-store' });
+        if (!res.ok) throw new Error();
+        const ab = await res.arrayBuffer();
+        const rows = await loadWorkbookFromArrayBuffer(ab);
+        ingestRows(rows);
+      } catch {
+        if (location.hostname.endsWith('github.io')) {
+          const user = location.hostname.split('.')[0];
+          const parts = location.pathname.split('/').filter(Boolean);
+          const repo = parts[0] || '';
+          const branch = 'main';
+          const dir = parts.slice(1, -1).join('/');
+          const url = `https://raw.githubusercontent.com/${user}/${repo}/${branch}/${dir ? dir + '/' : ''}data.xlsx?ts=${Date.now()}`;
+          try {
+            const res2 = await fetch(url, { cache:'no-store' });
+            if (!res2.ok) throw new Error();
+            const ab2 = await res2.arrayBuffer();
+            const rows2 = await loadWorkbookFromArrayBuffer(ab2);
+            ingestRows(rows2);
+            return;
+          } catch {
+            els.plot.innerHTML = '<div style="padding:12px;color:#9ca3af;">data.xlsx 자동 로드에 실패했습니다. 저장소 경로나 파일 위치를 확인해주세요.</div>';
+          }
+        }
+      }
+    }
+
+    // === 유틸: 헤더명 정규화 ===
+    function normHeader(v){ return String(v ?? '').trim().replaceAll(/\s+/g,'').toLowerCase(); }
+
+    function autoMapColumns(headerRow){
+      if (!headerRow?.length) return; // 폴백 유지
+      const hnorm = headerRow.map(normHeader);
+      // 분류
+      const idxP = hnorm.indexOf('분류'); if (idxP !== -1) COL_P_IDX = idxP;
+      // 서비스등급내역
+      const idxU = (()=>{ const c=['서비스등급내역','서비스등급','등급','서비스등급(내역)'].map(s=>s.replaceAll(/\s+/g,'').toLowerCase()); for(const x of c){const i=hnorm.indexOf(x); if(i!==-1) return i;} return -1; })();
+      if (idxU !== -1) COL_U_IDX = idxU;
+      // 서비스단가
+      const idxZ = hnorm.indexOf('서비스단가'); if (idxZ !== -1) COL_Z_IDX = idxZ;
+      // 구매처명 (업체명)
+      const idxVendor = (()=>{ const c=['구매처명','구매처','공급업체','업체명','거래처명','공급처'].map(s=>s.replaceAll(/\s+/g,'').toLowerCase()); for(const x of c){const i=hnorm.indexOf(x); if(i!==-1) return i;} return -1; })();
+      if (idxVendor !== -1) COL_VENDOR_IDX = idxVendor;
+    }
+
+    // 행 데이터 주입
+    function ingestRows(rows) {
+      if (!rows?.length) { alert('시트가 비어있습니다.'); return; }
+      const first = rows[0] || [];
+      const headerLike = first.some(v => typeof v === 'string');
+      const headerRow = headerLike ? first : [];
+      const data = headerLike ? rows.slice(1) : rows.slice();
+
+      // 헤더 자동 매핑 시도
+      if (headerLike) autoMapColumns(headerRow);
+
+      const startIdx = ROW_START - 1 - (headerLike ? 1 : 0);
+      const endIdx   = ROW_END   - 1 - (headerLike ? 1 : 0);
+      const slice = data.filter((_, i) => i >= startIdx && i <= endIdx);
+
+      state.rows = slice;
+      state.headers = headerRow.length ? headerRow : generateFallbackHeaders(rows[0]?.length || guessMaxCols(slice));
+
+      // 분류 드롭다운
+      const pVals = slice.map(r => r[COL_P_IDX]).filter(v => v != null && String(v).trim() !== '');
+      state.categoryValues = Array.from(new Set(pVals.map(v => String(v)))).sort((a,b)=>a.localeCompare(b,'ko'));
+      populateCategorySelect();
+
+      // 업체 드롭다운 (구매처명)
+      if (COL_VENDOR_IDX >= 0){
+        const vVals = slice.map(r => r[COL_VENDOR_IDX]).filter(v => v != null && String(v).trim() !== '');
+        state.vendorValues = Array.from(new Set(vVals.map(v => String(v)))).sort((a,b)=>a.localeCompare(b,'ko'));
+      } else {
+        state.vendorValues = [];
+      }
+      populateVendorSelect();
+
+      // 이벤트
+      els.orientation.onchange = drawCombined;
+      els.outliers.onchange = drawCombined;
+
+      drawCombined();
+    }
+
+    function guessMaxCols(rows){ return Math.max(0, ...rows.map(r => Array.isArray(r) ? r.length : 0)); }
+    function generateFallbackHeaders(n){ const a=[]; for(let i=0;i<n;i++) a.push(columnLabel(i)); return a; }
+    function columnLabel(idx){ let s='',n=idx; while(n>=0){ s=String.fromCharCode((n%26)+65)+s; n=Math.floor(n/26)-1; } return s; }
+
+    function populateCategorySelect(){
+      els.category.innerHTML = '';
+      const optAll = document.createElement('option'); optAll.value='__ALL__'; optAll.textContent=`전체 (${state.categoryValues.length}개 분류)`; els.category.appendChild(optAll);
+      state.categoryValues.forEach(v=>{ const o=document.createElement('option'); o.value=String(v); o.textContent=String(v); els.category.appendChild(o); });
+      els.category.value='__ALL__';
+      els.category.onchange = drawCombined;
+    }
+
+    function populateVendorSelect(){
+      els.vendor.innerHTML = '';
+      if (!state.vendorValues.length){
+        const o=document.createElement('option'); o.value='__NOVENDOR__'; o.textContent='(구매처명 열을 찾지 못했어요)'; o.disabled=true; o.selected=true; els.vendor.appendChild(o);
+        els.vendor.disabled = true; return;
+      }
+      els.vendor.disabled = false;
+      const optAll = document.createElement('option'); optAll.value='__ALL__'; optAll.textContent=`전체 (${state.vendorValues.length}개 업체)`; els.vendor.appendChild(optAll);
+      state.vendorValues.forEach(v=>{ const o=document.createElement('option'); o.value=String(v); o.textContent=String(v); els.vendor.appendChild(o); });
+      els.vendor.value='__ALL__';
+      els.vendor.onchange = drawCombined;
+    }
+
+    // === 한 화면: 분류별 vs 업체별 나란히 (각 등급별 2개 박스) ===
+    function drawCombined(){
+      if (!state.rows.length){ Plotly.purge(els.plot); return; }
+      const catSel = els.category.value;           // '__ALL__' 또는 특정 분류
+      const vendorSel = els.vendor.value;          // '__ALL__' 또는 특정 업체
+      const orient = els.orientation.value;        // 'v' or 'h'
+      const showOutliers = els.outliers.value !== 'none';
+
+      // 1) 분류 필터 집합
+      const rowsCat = state.rows.filter(r=>{
+        const p=r[COL_P_IDX], u=r[COL_U_IDX], y=r[COL_Z_IDX];
+        if (u==null || String(u).trim()==='') return false;
+        if (y==null || y==='' || !isFinite(+y)) return false;
+        if (catSel==='__ALL__') return true;
+        return String(p)===catSel;
+      });
+
+      // 2) 업체 필터 집합
+      const rowsVendor = (COL_VENDOR_IDX<0) ? [] : state.rows.filter(r=>{
+        const vendor=r[COL_VENDOR_IDX], u=r[COL_U_IDX], y=r[COL_Z_IDX];
+        if (vendor==null || String(vendor).trim()==='') return false;
+        if (u==null || String(u).trim()==='') return false;
+        if (y==null || y==='' || !isFinite(+y)) return false;
+        if (vendorSel==='__ALL__') return true;
+        return String(vendor)===vendorSel;
+      });
+
+      // 등급별 그룹핑
+      const mapByGrade = (rows)=>{
+        const m=new Map();
+        for(const r of rows){ const g=String(r[COL_U_IDX]).trim(); const v=+r[COL_Z_IDX]; if(!m.has(g)) m.set(g,[]); m.get(g).push(v); }
+        return m;
+      };
+      const byGradeCat = mapByGrade(rowsCat);
+      const byGradeVendor = mapByGrade(rowsVendor);
+
+      const traces=[];
+      const metricName = state.headers[COL_Z_IDX] ?? `열 ${columnLabel(COL_Z_IDX)}`;
+
+      const nameCat = (catSel==='__ALL__') ? '분류: 전체' : `분류: ${catSel}`;
+      const nameVendor = (vendorSel==='__ALL__') ? '업체: 전체' : `업체: ${vendorSel}`;
+
+      for(const g of GRADE_ORDER){
+        // A. 분류 트레이스
+        const arrA=(byGradeCat.get(g)||[]).filter(Number.isFinite);
+        if(arrA.length){
+          const hoverA = (orient==='v') ? `${g} · ${nameCat}<br>%{y:,.0f}원<extra></extra>` : `${g} · ${nameCat}<br>%{x:,.0f}원<extra></extra>`;
+          const tA = {type:'box', name:nameCat, legendgroup:'cat', offsetgroup:'cat', x:[g], boxpoints: showOutliers?'suspectedoutliers':false, jitter:.3, pointpos:0, hovertemplate:hoverA};
+          if(orient==='v') tA.y=arrA; else { tA.x=arrA; tA.orientation='h'; tA.y=[g]; }
+          traces.push(tA);
+        }
+        // B. 업체 트레이스
+        const arrB=(byGradeVendor.get(g)||[]).filter(Number.isFinite);
+        if(arrB.length){
+          const hoverB = (orient==='v') ? `${g} · ${nameVendor}<br>%{y:,.0f}원<extra></extra>` : `${g} · ${nameVendor}<br>%{x:,.0f}원<extra></extra>`;
+          const tB = {type:'box', name:nameVendor, legendgroup:'vendor', offsetgroup:'vendor', x:[g], boxpoints: showOutliers?'suspectedoutliers':false, jitter:.3, pointpos:0, hovertemplate:hoverB};
+          if(orient==='v') tB.y=arrB; else { tB.x=arrB; tB.orientation='h'; tB.y=[g]; }
+          traces.push(tB);
+        }
+      }
+
+      const numericAxis = { tickformat:',', ticksuffix:'원', gridcolor:'#1f2937', zerolinecolor:'#1f2937', automargin:true, title:{text:metricName, standoff:16} };
+      const catAxis = { gridcolor:'#1f2937', zerolinecolor:'#1f2937', automargin:true, categoryorder:'array', categoryarray:GRADE_ORDER, tickmode:'array', tickvals:GRADE_ORDER, ticktext:GRADE_ORDER };
+
+      const layout={ paper_bgcolor:'#0f172a', plot_bgcolor:'#0f172a', font:{color:'#e5e7eb'}, margin:{t:48,r:24,b:72,l:84}, showlegend:true, boxmode:'group', title:`분류 vs 업체 동시 비교 · Y축: ${metricName} (Z열)` };
+      if (els.orientation.value==='v'){ layout.xaxis={title:'서비스등급 (U열)',...catAxis}; layout.yaxis=numericAxis; }
+      else { layout.xaxis=numericAxis; layout.yaxis={title:'서비스등급 (U열)',...catAxis}; }
+
+      Plotly.react(els.plot, traces, layout, {responsive:true, displaylogo:false});
+    }
+
+    // 초기화
+    els.loadDefault.addEventListener('click', tryLoadDefault);
+    tryLoadDefault();
+  </script>
+</body>
+</html>
