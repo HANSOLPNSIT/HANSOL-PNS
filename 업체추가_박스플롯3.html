@@ -34,7 +34,7 @@
   <header>
     <h1>외주용역 박스플롯</h1>
     <div class="hint">
-      조건(행 이름 자동매핑): 대분류=‘분류’ 셀 · X축=‘서비스 등급내역’ 셀 · Y축=‘서비스단가’
+      조건(행 이름 자동매핑): 대분류='분류' 셀 · X축='서비스 등급내역' 셀 · Y축='서비스단가'
       <span class="badge">서비스단가</span> · 범위: <span class="badge">477–1000행(비어있으면 무시)</span>
     </div>
   </header>
@@ -269,23 +269,30 @@
       const nameCat = (catSel==='__ALL__') ? '분류: 전체' : `분류: ${catSel}`;
       const nameVendor = (vendorSel==='__ALL__') ? '업체: 전체' : `업체: ${vendorSel}`;
 
+      // A. 분류 트레이스 (모든 등급을 하나의 trace로)
+      const xDataCat = [], yDataCat = [];
       for(const g of GRADE_ORDER){
-        // A. 분류 트레이스
         const arrA=(byGradeCat.get(g)||[]).filter(Number.isFinite);
-        if(arrA.length){
-          const hoverA = (orient==='v') ? `${g} · ${nameCat}<br>%{y:,.0f}원<extra></extra>` : `${g} · ${nameCat}<br>%{x:,.0f}원<extra></extra>`;
-          const tA = {type:'box', name:nameCat, legendgroup:'cat', offsetgroup:'cat', x:[g], boxpoints: showOutliers?'suspectedoutliers':false, jitter:.3, pointpos:0, hovertemplate:hoverA};
-          if(orient==='v') tA.y=arrA; else { tA.x=arrA; tA.orientation='h'; tA.y=[g]; }
-          traces.push(tA);
-        }
-        // B. 업체 트레이스
+        for(const val of arrA){ xDataCat.push(g); yDataCat.push(val); }
+      }
+      if(xDataCat.length){
+        const tA = {type:'box', name:nameCat, legendgroup:'cat', offsetgroup:'cat', boxpoints: showOutliers?'suspectedoutliers':false, jitter:.3, pointpos:0};
+        if(orient==='v'){ tA.x=xDataCat; tA.y=yDataCat; tA.hovertemplate='%{x} · '+nameCat+'<br>%{y:,.0f}원<extra></extra>'; }
+        else { tA.x=yDataCat; tA.y=xDataCat; tA.orientation='h'; tA.hovertemplate='%{y} · '+nameCat+'<br>%{x:,.0f}원<extra></extra>'; }
+        traces.push(tA);
+      }
+
+      // B. 업체 트레이스 (모든 등급을 하나의 trace로)
+      const xDataVendor = [], yDataVendor = [];
+      for(const g of GRADE_ORDER){
         const arrB=(byGradeVendor.get(g)||[]).filter(Number.isFinite);
-        if(arrB.length){
-          const hoverB = (orient==='v') ? `${g} · ${nameVendor}<br>%{y:,.0f}원<extra></extra>` : `${g} · ${nameVendor}<br>%{x:,.0f}원<extra></extra>`;
-          const tB = {type:'box', name:nameVendor, legendgroup:'vendor', offsetgroup:'vendor', x:[g], boxpoints: showOutliers?'suspectedoutliers':false, jitter:.3, pointpos:0, hovertemplate:hoverB};
-          if(orient==='v') tB.y=arrB; else { tB.x=arrB; tB.orientation='h'; tB.y=[g]; }
-          traces.push(tB);
-        }
+        for(const val of arrB){ xDataVendor.push(g); yDataVendor.push(val); }
+      }
+      if(xDataVendor.length){
+        const tB = {type:'box', name:nameVendor, legendgroup:'vendor', offsetgroup:'vendor', boxpoints: showOutliers?'suspectedoutliers':false, jitter:.3, pointpos:0};
+        if(orient==='v'){ tB.x=xDataVendor; tB.y=yDataVendor; tB.hovertemplate='%{x} · '+nameVendor+'<br>%{y:,.0f}원<extra></extra>'; }
+        else { tB.x=yDataVendor; tB.y=xDataVendor; tB.orientation='h'; tB.hovertemplate='%{y} · '+nameVendor+'<br>%{x:,.0f}원<extra></extra>'; }
+        traces.push(tB);
       }
 
       const numericAxis = { tickformat:',', ticksuffix:'원', gridcolor:'#1f2937', zerolinecolor:'#1f2937', automargin:true, title:{text:metricName, standoff:16} };
