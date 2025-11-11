@@ -1,592 +1,423 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>S/W기술자 정규분포 시각화 · 표준편차 구간 계산</title>
-  <style>
-    :root {
-      --bg:#ffffff;            /* 전체 배경 */
-      --panel:#f5f6f8;         /* 카드/패널 배경 */
-      --ink:#0f172a;           /* 본문 텍스트 */
-      --muted:#6b7280;         /* 보조 텍스트 */
-      --brand:#2563eb;         /* 포인트 */
-      --good: rgba(16,185,129,.22);   /* ±1σ: green */
-      --warn: rgba(234,179,8,.20);    /* ±2σ: yellow */
-      --bad:  rgba(248,113,113,.18);  /* ±3σ: pinkish red */
-      --line:#e5e7eb;          /* 경계선 */
-      --soft:#f9fafb;          /* 부드러운 배경 */
-    }
-    * { box-sizing:border-box; }
-    body {
-      margin:0; background:var(--bg); color:var(--ink);
-      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Noto Sans KR", Ubuntu, Cantarell, "Helvetica Neue", Arial, "Apple Color Emoji", "Segoe UI Emoji";
-    }
-    .wrap { max-width:1180px; margin:28px auto; padding:0 16px; }
-    header { display:block; margin-bottom:12px; text-align:center; }
-    h1 { font-size:clamp(20px,3vw,28px); margin:0; font-weight:700; white-space:nowrap; }
-    .sub { color:var(--muted); font-size:13px; display:block; margin-top:6px; }
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>구매 이력 조회 · 업체 드롭다운 + 전체 검색 (Light)</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+  :root {
+    --bg:#ffffff;         /* 페이지 배경 (흰색) */
+    --panel:#ffffff;      /* 카드/표/입력 배경 (흰색) */
+    --ink:#111827;        /* 기본 글자색 (거의 검정) */
+    --muted:#6b7280;      /* 보조 텍스트 */
+    --brand:#2563eb;      /* 포인트 색상 (파랑) */
+    --border:#e5e7eb;     /* 경계선 (옅은 회색) */
+    --hover:#f3f4f6;      /* 헤더/행 hover 배경 */
+    --input:#ffffff;      /* 인풋 필드 배경 */
+  }
 
-    .card {
-      background:var(--panel); border:1px solid var(--line);
-      border-radius:16px; padding:16px; box-shadow:0 10px 24px rgba(15,23,42,.06);
-    }
+  *{box-sizing:border-box;}
+  body{
+    background:var(--bg);
+    color:var(--ink);
+    font-family:system-ui,-apple-system,Segoe UI,Roboto,"Apple SD Gothic Neo","Noto Sans KR",sans-serif;
+    margin:0;
+  }
 
-    .grid { display:grid; grid-template-columns:1fr; gap:16px; }
-    @media (min-width:960px) { .grid { grid-template-columns:380px 1fr; } }
+  header{
+    padding:18px 20px;
+    border-bottom:1px solid var(--border);
+    position:sticky; top:0; z-index:10;
+    background:var(--bg); /* 흰색 고정 */
+    backdrop-filter:saturate(120%) blur(2px);
+  }
 
-    .row { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px; }
-    label { font-size:12px; color:var(--muted); display:block; margin-bottom:6px; }
-    input, select {
-      width:100%; padding:10px 12px; border-radius:10px;
-      border:1px solid var(--line); background:#fff; color:var(--ink);
-    }
-    input[type="number"] { appearance:textfield; }
-    .btn {
-      background:linear-gradient(90deg, #60a5fa, #34d399); border:none; color:#0b1220;
-      font-weight:700; padding:10px 14px; border-radius:12px; cursor:pointer;
-    }
-    .btn:active { transform:translateY(1px); }
-    .btn.ghost { background:#fff; border:1px solid var(--line); color:var(--ink); }
+  h1{margin:0 0 10px; font-size:20px; font-weight:700;}
 
-    .legend { display:flex; flex-wrap:wrap; gap:10px; font-size:12px; color:var(--muted); }
-    .swatch { width:14px; height:14px; border-radius:3px; display:inline-block; margin-right:6px; vertical-align:-2px; border:1px solid var(--line); }
+  .controls{
+    display:grid; gap:10px; grid-template-columns:1fr 1.2fr 1fr;
+  }
+  .controls label{font-size:12px; color:var(--muted);}
+  .control{display:grid; gap:6px;}
 
-    .results { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-top:8px; }
-    .pill {
-      background:#fff; border:1px solid var(--line); border-radius:12px; padding:10px;
-      transition:box-shadow .15s, border-color .15s;
-    }
-    .pill b { color:var(--ink); }
-    .pill.highlight { border-color:var(--brand); box-shadow:0 0 0 2px rgba(37,99,235,.15) inset; }
-    .bandxs { margin-top:6px; font-size:12px; color:var(--muted); line-height:1.4; }
+  select,
+  input[type="search"],
+  input[list],
+  button,
+  input[type="file"]{
+    background:var(--input);
+    border:1px solid var(--border);
+    color:var(--ink);
+    padding:10px 12px;
+    border-radius:12px;
+    outline:none; font-size:14px;
+  }
+  select{cursor:pointer;}
+  select option{background:#ffffff; color:#111827;}
 
-    canvas { width:100%; height:500px; border-radius:14px; display:block; background:#ffffff; border:1px solid var(--line); }
-    .foot { margin-top:10px; color:var(--muted); font-size:12px; }
+  button.primary{
+    background:var(--brand); border-color:transparent; color:#ffffff; font-weight:700;
+  }
+  button.ghost{
+    background:#ffffff; border:1px solid var(--border); color:var(--ink);
+  }
 
-    .axisbox { margin-top:12px; display:grid; grid-template-columns:1fr 1fr; gap:12px; font-size:12px; color:var(--muted); }
-    .axisbox .box { background:#fff; border:1px solid var(--line); border-radius:12px; padding:10px; }
-    .axisbox code { white-space:pre-wrap; word-break:break-word; display:block; color:#374151; }
+  main{padding:16px 20px 80px;}
 
-    .kv { font-size:12px; color:var(--muted); }
-    .kv b { color:var(--ink); }
+  table{
+    width:100%; border-collapse:collapse; background:var(--panel);
+    border:1px solid var(--border); border-radius:12px; overflow:hidden;
+  }
+  th{
+    position:sticky; top:0; background:#ffffff; color:var(--muted);
+    font-weight:600; font-size:12px; border-bottom:1px solid var(--border);
+    padding:10px 8px; text-align:left; cursor:pointer; user-select:none;
+  }
+  th:hover{background:var(--hover); color:var(--brand);}
+  th.sortable::after{content:" ⬍"; opacity:0.3; margin-left:4px;}
+  th.sort-asc::after{content:" ⬆"; opacity:1;}
+  th.sort-desc::after{content:" ⬇"; opacity:1;}
 
-    .unitTag { position:absolute; right:14px; top:10px; font-size:12px; color:#475569; }
-    .statLine { position:absolute; right:14px; top:30px; font-size:13px; color:#1f2937; opacity:.95; }
-    .chartWrap { position:relative; }
+  tbody td{
+    padding:10px 8px; border-bottom:1px solid var(--border); font-size:14px;
+  }
+  tbody tr:hover{background:rgba(37,99,235,0.06);} /* 은은한 파랑 톤 */
 
-    .uploadWrap { margin-top:18px; display:flex; justify-content:flex-end; gap:10px; align-items:center; color:var(--muted); font-size:12px; }
-    #fileInput { display:none; }
-  </style>
+  .right{text-align:right;}
+  .hidden{display:none;}
+  .footer{position:fixed; bottom:12px; right:12px; display:flex; gap:8px;}
+
+  /* 디버그 영역 숨김 */
+  .debug-info{display:none !important;}
+
+  .summary{margin-top:10px; color:var(--muted); font-size:13px;}
+</style>
 </head>
 <body>
-  <div class="wrap">
-    <header>
-      <h1>SW기술자 정규분포 시각화 · 표준편차 구간 계산</h1>
-      <span class="sub">대·중분류를 선택하면 평균(μ)·표준편차(σ)를 계산합니다. 확인값을 입력 후 시뮬레이션하세요. 표시는 <b>소수점 절삭</b>, 값은 <b>(단위: 천원)</b>.</span>
-    </header>
-
-    <div class="grid">
-      <!-- Controls -->
-      <div class="card">
-        <div class="row">
-          <div>
-            <label>대분류</label>
-            <select id="ddlA"></select>
-          </div>
-          <div>
-            <label>중분류</label>
-            <select id="ddlB"></select>
-          </div>
-        </div>
-
-        <div class="row">
-          <div>
-            <label>평균 (μ) <small>(절삭)</small></label>
-            <input id="mean" type="number" value="" step="any" />
-          </div>
-          <div>
-            <label>표준편차 (σ) <small>(절삭)</small></label>
-            <input id="std" type="number" value="" step="any" />
-          </div>
-        </div>
-        <div class="row">
-          <div>
-            <label>확인 값</label>
-            <input id="xval" type="number" placeholder="값을 입력하면 z-score·±σ 표기" step="any" />
-          </div>
-          <div>
-            <label>범위 스케일</label>
-            <input id="rangeMul" type="text" value="±3σ" readonly />
-          </div>
-        </div>
-        <div class="row">
-          <button class="btn" id="calcBtn">시뮬레이션</button>
-          <button class="btn ghost" id="resetBtn" title="선택 초기화">초기화</button>
-        </div>
-
-        <div class="legend" style="margin-top:8px">
-          <div><span class="swatch" style="background:var(--good)"></span>±1σ: |x-μ| ≤ 1σ (초록)</div>
-          <div><span class="swatch" style="background:var(--warn)"></span>±2σ: 1σ < |x-μ| ≤ 2σ (노랑)</div>
-          <div><span class="swatch" style="background:var(--bad)"></span>±3σ: 2σ < |x-μ| ≤ 3σ (핑크)</div>
-          <div><span class="swatch" style="background:#ffffff"></span>정규분포선(PDF, 흰색)</div>
-        </div>
-
-        <div class="results" id="rangesBox"></div>
-        <div id="xinfo" class="foot"></div>
-      </div>
-
-      <!-- Chart -->
-      <div class="card chartWrap">
-        <span class="unitTag">(단위: 천원)</span>
-        <span class="statLine" id="statLine"></span>
-        <canvas id="chart" width="1024" height="520"></canvas>
-        <div class="axisbox" id="axisBox">
-          <div class="box">
-            <b>X축 눈금값 (밴드 중앙)</b>
-            <code id="xTicks"></code>
-          </div>
-          <div class="box">
-            <b>Y축 눈금값 (좌측 등간격)</b>
-            <code id="yTicks"></code>
-          </div>
-        </div>
-      </div>
+<header id="pageHeader">
+  <h1>구매 이력 조회 · 업체 드롭다운 + 전체 검색</h1>
+  <div class="controls">
+    <div class="control">
+      <label>데이터 파일 (Excel .xlsx) — 기본: data.xlsx (GitHub)</label>
+      <input id="file" type="file" accept=".xlsx,.xls" />
     </div>
-
-    <!-- 업로드 영역 (하단, 비노출 스타일) -->
-    <div class="uploadWrap">
-      <span id="sheetInfo" class="kv"></span>
-      <input id="fileInput" type="file" accept=".xlsx,.xlsm" />
-      <button class="btn ghost" id="reuploadBtn" title="저장 데이터 삭제 후 새 파일 선택">데이터 재업로드</button>
+    <div class="control">
+      <label>구매처명 (드롭다운 선택)</label>
+      <select id="vendorSelect">
+        <option value="">모든 구매처</option>
+      </select>
     </div>
-
-    <p class="foot">Tip: "확인 값"을 입력하면 z=(x-μ)/σ(절삭 표기), 누적확률(근사), 그리고 <b>해당 ±σ(±1·±2·±3σ)</b>을 알려줍니다. 모든 표시는 소수점 이하 절삭(반올림 없음), 값 표시는 천원 단위.</p>
+    <div class="control">
+      <label>전체 데이터 검색 (부분 일치)</label>
+      <input id="globalSearch" type="search" placeholder="프로젝트명, 분류, 비고 등 키워드" />
+    </div>
   </div>
+  <div class="summary">
+    <span id="countShown">0</span>건 / 총 <span id="countTotal">0</span>건
+  </div>
+  <div id="debugInfo" class="debug-info"></div>
+</header>
 
-  <!-- SheetJS (XLSX 파서) -->
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<main>
+  <table id="table">
+    <thead>
+      <tr>
+        <th class="sortable" data-key="poDate">PO생성일</th>
+        <th class="sortable" data-key="ponumber">PO번호</th>
+        <th class="sortable" data-key="projectCode">프로젝트코드</th>
+        <th class="sortable" data-key="project">프로젝트명</th>
+        <th class="sortable" data-key="type">분류</th>
+        <th class="sortable right" data-key="unitPrice">서비스단가</th>
+        <th class="sortable" data-key="unit">서비스단위</th>
+        <th class="sortable" data-key="grade">서비스 등급내역</th>
+        <th class="sortable right" data-key="qty">서비스수량</th>
+        <th class="sortable" data-key="note">비고</th>
+        <!-- 비고 옆에 '구매처명' 노출 -->
+        <th class="sortable" data-key="vendor">구매처명</th>
+        <!-- 내부 용도: 대분류는 계속 숨김 -->
+        <th class="hidden">대분류</th>
+      </tr>
+    </thead>
+    <tbody id="tbody"></tbody>
+  </table>
+</main>
 
-  <script>
-    const meanEl = document.getElementById('mean');
-    const stdEl  = document.getElementById('std');
-    const xEl    = document.getElementById('xval');
-    const rangesBox = document.getElementById('rangesBox');
-    const xinfo = document.getElementById('xinfo');
-    const canvas = document.getElementById('chart');
-    const ctx = canvas.getContext('2d');
-    const xTicksEl = document.getElementById('xTicks');
-    const yTicksEl = document.getElementById('yTicks');
-    const statLine = document.getElementById('statLine');
-    const sheetInfoEl = document.getElementById('sheetInfo');
-    const ddlA = document.getElementById('ddlA');
-    const ddlB = document.getElementById('ddlB');
-    const fileInput = document.getElementById('fileInput');
+<div class="footer">
+  <button id="resetBtn" class="ghost">필터 초기화</button>
+  <button id="reloadBtn" class="primary">기본파일 다시 불러오기</button>
+</div>
 
-    const chartCard = document.querySelector('.card.chartWrap');
-    const axisBoxWrap = document.getElementById('axisBox');
+<script>
+const DEFAULT_URL = () => `data.xlsx?ts=${Date.now()}`;
+const PREFERRED_SHEET_NAMES = ["외주용역","Sheet1","data","DATA"];
+const HEADER_MAP = {
+  vendor:["구매처명","업체","벤더","Vendor","매입처"],
+  category:["대분류","분류(대)","Category","카테고리"],
+  poDate:["PO생성일","발주생성일","주문일","PO Date","PO일자"],
+  ponumber:["PO번호"],
+  projectCode:["프로젝트코드","프로젝트 코드","Project Code","사업코드"],
+  project:["프로젝트명","사업명","프로젝트","Project"],
+  type:["분류","소분류","Type"],
+  unitPrice:["서비스단가","단가","UnitPrice","금액"],
+  unit:["서비스단위","단위","Unit"],
+  grade:["서비스 등급내역","서비스등급내역","서비스 등급 내역","서비스등급 내역","등급내역","등급","Grade","grade","서비스등급","서비스 등급"],
+  qty:["서비스수량","수량","Qty","수량(EA)"],
+  note:["비고","메모","Remark","Note"]
+};
 
-    function clearVisuals(){
-      try{ ctx.clearRect(0,0,canvas.width,canvas.height); }catch(_){}
-      xTicksEl.textContent = '';
-      yTicksEl.textContent = '';
-      statLine.textContent = '';
-      rangesBox.innerHTML = '';
-      xinfo.textContent = '';
+let rawRows=[],viewRows=[];
+let sortKey='poDate',sortAsc=false;
+
+const $=(s)=>document.querySelector(s);
+const tbody=$("#tbody");
+const vendorSelect=$("#vendorSelect");
+const globalSearch=$("#globalSearch");
+const countShown=$("#countShown");
+const countTotal=$("#countTotal");
+const debugInfo=$("#debugInfo");
+
+const fmtKRW=(n)=>(n===null||n===undefined||n==="")?"":new Intl.NumberFormat('ko-KR',{maximumFractionDigits:0}).format(Number(n))+"원";
+const fmtQty=(n)=>(n===null||n===undefined||n==="")?"":new Intl.NumberFormat('ko-KR',{maximumFractionDigits:2}).format(Number(n));
+const parseDate=(v)=>{if(!v&&v!==0)return null;if(typeof v==='number'){const d=XLSX.SSF.parse_date_code(v);return new Date(d.y,d.m-1,d.d);}const s=String(v).trim().replaceAll(".","-").replaceAll("/","-");const dt=new Date(s);return isNaN(dt)?null:dt;};
+const fmtDate=(d)=>!d?"":d.toISOString().slice(0,10);
+const norm=(s)=>(s??"").toString().trim();
+
+/* 디버그 비활성 */
+function showDebug(message){ /* no-op */ }
+
+/* ========= 정렬 유틸 (오름차순 비교기 + 안정정렬) ========= */
+function isEmptyVal(v){
+  if(v===null||v===undefined) return true;
+  if(typeof v==='number') return Number.isNaN(v);
+  if(typeof v==='string') return v.trim()==='';
+  return false;
+}
+function normalizeValue(v){
+  if(isEmptyVal(v)) return {type:'empty', value:''};
+  if(v instanceof Date) return {type:'date', value:+v};
+  if(typeof v==='number') return {type:'number', value:v};
+  if(typeof v==='string'){
+    const s=v.trim();
+    if(/^[-+]?[\d.,]+$/.test(s)){
+      const n=Number(s.replace(/,/g,''));
+      if(!Number.isNaN(n)) return {type:'number', value:n};
     }
-    function setEmptyState(isEmpty){
-      if(isEmpty){
-        meanEl.value = '';
-        stdEl.value  = '';
-        statMax = null; statMin = null;
-        chartCard.style.display = 'none';
-        axisBoxWrap.style.display = 'none';
-        clearVisuals();
-      }else{
-        chartCard.style.display = 'block';
-        axisBoxWrap.style.display = 'grid';
-      }
+    const d=new Date(s);
+    if(!Number.isNaN(+d)) return {type:'date', value:+d};
+    return {type:'string', value:s};
+  }
+  return {type:'string', value:String(v)};
+}
+function cmpAsc(a,b){
+  const A=normalizeValue(a), B=normalizeValue(b);
+  const Ae=(A.type==='empty'), Be=(B.type==='empty');
+  if(Ae&&Be) return 0;
+  if(Ae) return 1;      // empty 뒤
+  if(Be) return -1;     // empty 뒤
+  if(A.type===B.type){
+    if(A.type==='number'||A.type==='date'){
+      const diff=A.value-B.value;
+      return diff===0?0:diff;
     }
+    return String(A.value).localeCompare(String(B.value),'ko',{numeric:true, sensitivity:'base'});
+  }
+  return String(A.value).localeCompare(String(B.value),'ko',{numeric:true, sensitivity:'base'});
+}
+function stableSort(arr, getter, ascending=true){
+  return arr
+    .map((row,idx)=>({row,idx}))
+    .sort((x,y)=>{
+      const a= getter? getter(x.row): x.row;
+      const b= getter? getter(y.row): y.row;
+      const base = ascending ? cmpAsc(a,b) : -cmpAsc(a,b);
+      return base!==0? base : (x.idx - y.idx);
+    })
+    .map(w=>w.row);
+}
+/* =======================================================*/
 
-    let wbGlobal = null;
-    let statMax = null, statMin = null;
-    let dataSource = 'remote';
+function detectHeaders(headerRow){
+  const normalizeForMatch=(s)=>String(s??"").toLowerCase()
+    .replace(/[\u00A0\u1680\u180E\u2000-\u200B\u202F\u205F\u3000]/g,' ')
+    .replace(/\s+/g,' ')
+    .trim();
+  const h={};
+  const row=headerRow.map(h=>normalizeForMatch(h));
 
-    const trunc0 = (n) => (n>=0? Math.floor(n): Math.ceil(n)); // 소수 절삭
-    const fmtK = (n) => { if (!isFinite(n)) return '-'; const v = trunc0(n); return v.toLocaleString('ko-KR'); };
-    const fmtPlain = (n) => { if (!isFinite(n)) return '-'; return trunc0(n).toLocaleString('ko-KR'); };
-    function pdf(x, mu, sigma){ const a = 1 / (sigma * Math.sqrt(2*Math.PI)); const e = Math.exp(-0.5 * Math.pow((x-mu)/sigma, 2)); return a * e; }
-    function cdf_approx(x, mu, sigma){ const z = (x - mu) / (sigma * Math.SQRT2); const t = 1 / (1 + 0.3275911 * Math.abs(z)); const a1=0.254829592, a2=-0.284496736, a3=1.421413741, a4=-1.453152027, a5=1.061405429; const erf = 1 - (((((a5*t + a4)*t) + a3)*t + a2)*t + a1)*t*Math.exp(-z*z); const sign = z < 0 ? -1 : 1; return 0.5 * (1 + sign * erf); }
-    function setOptions(select, arr, initial){
-      select.innerHTML = '';
-      const uniq = Array.from(new Set(arr.filter(v=>v!=='' && v!=null)));
-      if (uniq.length===0 && initial) uniq.push(initial);
-      uniq.forEach(v=>{
-        const opt = document.createElement('option');
-        opt.value = v; opt.textContent = v; select.appendChild(opt);
-      });
-      if (initial!=null && uniq.includes(initial)) select.value = initial;
+  for(const [key,aliases] of Object.entries(HEADER_MAP)){
+    let idx=-1;
+    for(const a of aliases){
+      const i=row.indexOf(normalizeForMatch(a));
+      if(i!==-1){ idx=i; break; }
     }
-
-    const ROW_START = 499;
-    const ROW_END   = 744;
-
-    const LS_KEY = 'excel_b64_v1';
-    const bytesToBase64 = (bytes) => { let bin = ''; const chunk = 0x8000; for (let i=0; i<bytes.byteLength; i+=chunk){ const sub = bytes.subarray(i, i+chunk); bin += String.fromCharCode.apply(null, sub); } return btoa(bin); };
-    const base64ToBytes = (b64) => { const bin = atob(b64); const len = bin.length; const bytes = new Uint8Array(len); for (let i=0;i<len;i++) bytes[i] = bin.charCodeAt(i); return bytes; };
-
-    async function initFromWorkbookBytes(uint8){
-      const wb = XLSX.read(uint8, { type: 'array' });
-      wbGlobal = wb;
-      const sheetInfo = [];
-
-      // 대분류 목록: 분류비율
-      let listA = [];
-      if (wb.Sheets['분류비율']){
-        const wsCat = wb.Sheets['분류비율'];
-        for(let r=2; r<=12; r++){
-          const cell = wsCat['A'+r];
-          if(cell && cell.v!=null && String(cell.v).trim()!=='') listA.push(String(cell.v).trim());
-        }
-        sheetInfo.push(`대분류 원본: <b>분류비율</b>`);
-      } else {
-        sheetInfo.push(`대분류 원본: <b>분류비율 시트 없음</b>`);
-      }
-      setOptions(ddlA, listA, listA[0]||null);
-
-      // 중분류 고정 리스트
-      const listB = ['초급','중급','고급','특급'];
-      setOptions(ddlB, listB, '초급');
-
-      const hasData = computeFromFormulas();
-      setEmptyState(!hasData);
-      if (hasData) draw();
-
-      const srcTag = dataSource==='local' ? '로컬(임시저장)' : 'data.xlsx(원격)';
-      sheetInfo.push(`데이터 소스: <b>${srcTag}</b>`);
-      sheetInfoEl.innerHTML = sheetInfo.join(' · ');
-    }
-
-    fileInput.addEventListener('change', async (e)=>{
-      const file = e.target.files[0]; if(!file) return;
-      const buf = await file.arrayBuffer();
-      const bytes = new Uint8Array(buf);
-      try { localStorage.setItem(LS_KEY, bytesToBase64(bytes)); } catch(_) {}
-      dataSource = 'local';
-      await initFromWorkbookBytes(bytes);
-    });
-
-    (async function restore(){
-      try{
-        const res = await fetch('data.xlsx', { cache:'no-store' });
-        if (res.ok){
-          const buf = await res.arrayBuffer();
-          dataSource = 'remote';
-          await initFromWorkbookBytes(new Uint8Array(buf));
-          return;
-        }
-      }catch(_){}
-      try{
-        const b64 = localStorage.getItem(LS_KEY);
-        if (b64){
-          const bytes = base64ToBytes(b64);
-          dataSource = 'local';
-          await initFromWorkbookBytes(bytes);
-          return;
-        }
-      }catch(_){}
-      setEmptyState(true);
-    })();
-
-    document.getElementById('reuploadBtn').addEventListener('click', ()=>{
-      try{ localStorage.removeItem(LS_KEY); }catch(_){}
-      fileInput.click();
-    });
-
-    function draw(){
-      const mu = trunc0(parseFloat(meanEl.value));
-      const sigma = Math.abs(trunc0(parseFloat(stdEl.value)));
-      const mul = 3;
-
-      const ratio = window.devicePixelRatio || 1;
-      const displayWidth = canvas.clientWidth || canvas.width;
-      const displayHeight = canvas.clientHeight || canvas.height;
-      canvas.width = Math.round(displayWidth * ratio);
-      canvas.height = Math.round(displayHeight * ratio);
-      ctx.setTransform(ratio,0,0,ratio,0,0);
-
-      if(!isFinite(mu) || !isFinite(sigma) || sigma === 0){
-        clearVisuals();
-        return;
-      }
-
-      ctx.clearRect(0,0,canvas.width, canvas.height);
-      const W = canvas.width/ratio, H = canvas.height/ratio;
-      const padL=76, padR=24, padT=26, padB=78;
-      const plotW = W - padL - padR;
-      const plotH = H - padT - padB;
-
-      const xmin = mu - mul*sigma;
-      const xmax = mu + mul*sigma;
-
-      const X = Array.from({length:73}, (_,i)=> mu - 3*sigma + i * (6*sigma/70));
-
-      const css = getComputedStyle(document.documentElement);
-      const colGood  = css.getPropertyValue('--good').trim();
-      const colWarn  = css.getPropertyValue('--warn').trim();
-      const colBad   = css.getPropertyValue('--bad').trim();
-
-      let pdfMax = 0;
-      for(let i=0;i<X.length;i++){
-        const y = pdf(X[i],mu,sigma);
-        if(y>pdfMax) pdfMax=y;
-      }
-      const maxY = pdfMax || 1;
-
-      const xToPx = x => padL + ( (x - xmin) / (xmax - xmin) ) * plotW;
-      const yToPx = y => padT + (1 - (y / maxY)) * plotH;
-
-      // 배경 밴드
-      const bands = [
-        {k:3, L: mu-3*sigma, R: mu-2*sigma, color: colBad,  name:'±3σ', cx: mu-2.5*sigma},
-        {k:2, L: mu-2*sigma, R: mu-1*sigma, color: colWarn, name:'±2σ', cx: mu-1.5*sigma},
-        {k:1, L: mu-1*sigma, R: mu+1*sigma, color: colGood, name:'±1σ', cx: mu},
-        {k:2, L: mu+1*sigma, R: mu+2*sigma, color: colWarn, name:'±2σ', cx: mu+1.5*sigma},
-        {k:3, L: mu+2*sigma, R: mu+3*sigma, color: colBad,  name:'±3σ', cx: mu+2.5*sigma}
-      ];
-      bands.forEach(b => {
-        const L = Math.max(b.L, xmin);
-        const R = Math.min(b.R, xmax);
-        if(L>=R) return;
-        ctx.fillStyle = b.color;
-        ctx.fillRect(xToPx(L), padT, xToPx(R)-xToPx(L), plotH);
-      });
-
-      // 격자 + Y축 눈금
-      ctx.strokeStyle = 'rgba(0,0,0,.10)';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      for(let g=0; g<=5; g++){
-        const gy = padT + (g/5)*plotH;
-        ctx.moveTo(padL, gy);
-        ctx.lineTo(padL+plotW, gy);
-      }
-      ctx.stroke();
-
-      ctx.fillStyle = '#374151';
-      ctx.textAlign = 'right';
-      ctx.textBaseline = 'middle';
-      ctx.font = '14px ui-sans-serif, system-ui';
-      for(let g=0; g<=5; g++){
-        const gy = padT + (g/5)*plotH;
-        const val = ((5-g)/5) * maxY;
-        ctx.fillText(val.toFixed(5), padL - 8, gy);
-      }
-
-      // 밴드 영역 채움
-      const fillBandArea = (L, R, color) => {
-        const Lc = Math.max(L, xmin), Rc = Math.min(R, xmax);
-        if (Lc>=Rc) return;
-        const N2 = 600;
-        ctx.beginPath();
-        ctx.moveTo(xToPx(Lc), yToPx(0));
-        for(let i=0;i<=N2;i++){
-          const x = Lc + (i/N2)*(Rc-Lc);
-          const y = pdf(x, mu, sigma);
-          ctx.lineTo(xToPx(x), yToPx(y));
-        }
-        ctx.lineTo(xToPx(Rc), yToPx(0));
-        ctx.closePath();
-        ctx.fillStyle = color;
-        ctx.fill();
-      };
-      fillBandArea(mu-3*sigma, mu-2*sigma, colBad);
-      fillBandArea(mu-2*sigma, mu-1*sigma, colWarn);
-      fillBandArea(mu-1*sigma, mu+1*sigma, colGood);
-      fillBandArea(mu+1*sigma, mu+2*sigma, colWarn);
-      fillBandArea(mu+2*sigma, mu+3*sigma, colBad);
-
-      // 정규분포선
-      ctx.beginPath();
-      for(let i=0;i<X.length;i++){
-        const px = xToPx(X[i]);
-        const py = yToPx(pdf(X[i],mu,sigma));
-        if(i===0) ctx.moveTo(px,py); else ctx.lineTo(px,py);
-      }
-      ctx.strokeStyle = '#111827';
-      ctx.lineWidth = 1.6;
-      ctx.stroke();
-
-      // μ와 ±σ 눈금선
-      ctx.setLineDash([6,6]);
-      ctx.strokeStyle = 'rgba(0,0,0,.25)';
-      ctx.lineWidth = 1.2;
-      for(let k=-3; k<=3; k++){
-        const x = mu + k*sigma;
-        ctx.beginPath();
-        ctx.moveTo(xToPx(x), padT);
-        ctx.lineTo(xToPx(x), padT+plotH);
-        ctx.stroke();
-      }
-      ctx.setLineDash([]);
-
-      // X축 라벨
-      ctx.fillStyle = '#4b5563';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'top';
-      ctx.font = '14px ui-sans-serif, system-ui';
-      bands.forEach(b=>{
-        if (b.cx<xmin || b.cx>xmax) return;
-        ctx.fillText(b.name, xToPx(b.cx), padT+plotH+6);
-        ctx.fillText(fmtK(b.cx), xToPx(b.cx), padT+plotH+24);
-      });
-
-      // 확인 값 마커
-      xinfo.textContent = '';
-      const xv = parseFloat(xEl.value);
-      if(isFinite(xv)){
-        const px = xToPx(xv);
-        ctx.beginPath();
-        ctx.moveTo(px, padT);
-        ctx.lineTo(px, padT+plotH);
-        ctx.strokeStyle = '#11182766';
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
-
-        ctx.beginPath();
-        ctx.arc(px, yToPx(pdf(xv,mu,sigma)), 4, 0, Math.PI*2);
-        ctx.fillStyle = '#111827aa';
-        ctx.fill();
-
-        const z = (xv - mu) / sigma;
-        const absZ = Math.abs(z);
-        let band = null;
-        if(absZ <= 1) band = 1;
-        else if(absZ <= 2) band = 2;
-        else if(absZ <= 3) band = 3;
-        else band = '>3';
-
-        const p = cdf_approx(xv, mu, sigma) * 100;
-        xinfo.innerHTML =
-          `확인 값 = <b>${fmtK(xv)}</b> · z = <b>${(trunc0(z*1000)/1000)}</b> · 누적확률 ≈ <b>${(Math.floor(p*100)/100).toFixed(2)}%</b> · 범주: <b>${band==='>3' ? '±3σ 초과' : `±${band}σ`}</b>`;
-
-        document.querySelectorAll('#rangesBox .pill').forEach(el=>el.classList.remove('highlight'));
-        const target = document.querySelector(`#rangesBox .pill[data-k="${band}"]`);
-        if(target) target.classList.add('highlight');
-      }
-
-      // 밴드별 X 요약
-      const bandVals = {1:[], 2:[], 3:[]};
-      X.forEach(x=>{
-        const d = Math.abs(x - mu);
-        if (d <= 1*sigma) bandVals[1].push(x);
-        else if (d <= 2*sigma) bandVals[2].push(x);
-        else if (d <= 3*sigma) bandVals[3].push(x);
-      });
-
-      const pillHtml = (k) => {
-        const L = mu - k*sigma, R = mu + k*sigma;
-        const arr = bandVals[k];
-        let body = 'X: (해당 없음)';
-        if (arr && arr.length){
-          const mn = Math.min(...arr), mx = Math.max(...arr);
-          body = `X: ${fmtK(mn)} ~ ${fmtK(mx)}`;
-        }
-        const pct = k===1? '약 68.27%': k===2? '약 95.45%':'약 99.73%';
-        return `<div class="pill" data-k="${k}">
-                  <div><b>±${k}σ</b></div>
-                  <div>${fmtK(L)} ~ ${fmtK(R)} (${pct})</div>
-                  <div class="bandxs">${body}</div>
-                </div>`;
-      };
-      rangesBox.innerHTML = pillHtml(1) + pillHtml(2) + pillHtml(3);
-
-      // 눈금 텍스트
-      xTicksEl.textContent = bands.map(b=> fmtK(b.cx)).join('  |  ');
-      const yTicks = [];
-      for(let g=0; g<=5; g++){
-        const val = ((5-g)/5) * maxY;
-        yTicks.push(val.toFixed(5));
-      }
-      yTicksEl.textContent = yTicks.join('  |  ');
-
-      // 상단 요약
-      if (isFinite(statMax) && isFinite(statMin) && isFinite(mu)){
-        statLine.textContent = `평균: ${fmtK(mu)} · 최대: ${fmtPlain(statMax)} · 최소: ${fmtPlain(statMin)}`;
-      } else {
-        statLine.textContent = '';
+    if(idx===-1){
+      const noSpaceRow=row.map(x=>x.replace(/\s+/g,''));
+      for(const a of aliases){
+        const i=noSpaceRow.indexOf(normalizeForMatch(a).replace(/\s+/g,''));
+        if(i!==-1){ idx=i; break; }
       }
     }
+    h[key]=idx;
+  }
+  return h;
+}
 
-    function computeFromFormulas(){
-      try{
-        if(!wbGlobal) return false;
-        const ws = wbGlobal.Sheets['외주용역'];
-        if(!ws) return false;
-        const selA = ddlA.value;
-        const selB = ddlB.value;
-        const vals = [];
-        for(let r=ROW_START; r<=ROW_END; r++){
-          const p = ws['P'+r];
-          const u = ws['U'+r];
-          const z = ws['Z'+r];
-          const Pv = p? String(p.v).trim():'';
-          const Uv = u? String(u.v).trim():'';
-          const Zv = z? Number(String(z.v).replace(/,/g,'')) : NaN;
-          if (Pv===selA && Uv===selB && isFinite(Zv)) vals.push(Zv);
-        }
-        if (!vals.length){
-          meanEl.value = '';
-          stdEl.value  = '';
-          statMax = null; statMin = null;
-          return false;
-        }
-        const mean = vals.reduce((s,x)=>s+x,0)/vals.length / 1000;
-        const m0 = vals.reduce((s,x)=>s+x,0)/vals.length;
-        const varPop = vals.reduce((s,x)=> s + (x-m0)*(x-m0), 0) / vals.length;
-        const stdevP = Math.sqrt(varPop) / 1000;
-        statMax = Math.max(...vals) / 1000;
-        statMin = Math.min(...vals) / 1000;
+function loadSheet(wb){
+  const name=wb.SheetNames.find(n=>PREFERRED_SHEET_NAMES.includes(n))||wb.SheetNames[0];
+  const sheet=wb.Sheets[name];
+  const rows=XLSX.utils.sheet_to_json(sheet,{header:1,defval:""});
+  if(!rows.length) return;
 
-        meanEl.value = trunc0(mean);
-        stdEl.value  = trunc0(stdevP);
-        return true;
-      }catch(e){ return false; }
+  const map=detectHeaders(rows[0]);
+
+  rawRows=rows.slice(1).map((r)=>{
+    const obj={
+      vendor:norm(r[map.vendor]),
+      category:norm(r[map.category]),
+      poDate:parseDate(r[map.poDate]),
+      ponumber:map.ponumber!==-1?norm(r[map.ponumber]):"",
+      projectCode:map.projectCode!==-1?norm(r[map.projectCode]):"",
+      project:norm(r[map.project]),
+      type:norm(r[map.type]),
+      unitPrice:r[map.unitPrice]===""?"":Number(String(r[map.unitPrice]).replace(/[^\d.-]/g,"")),
+      unit:norm(r[map.unit]),
+      grade:map.grade!==-1?norm(r[map.grade]):"",
+      qty:r[map.qty]===""?"":Number(String(r[map.qty]).replace(/[^\d.-]/g,"")),
+      note:norm(r[map.note])
+    };
+    obj._search=[obj.vendor,obj.category,obj.ponumber,obj.projectCode,obj.project,obj.type,obj.unit,obj.grade,obj.note,obj.unitPrice,obj.qty,fmtDate(obj.poDate)].join(" ").toLowerCase();
+    return obj;
+  }).filter(r=>Object.values(r).some(v=>v!==""));
+
+  populateVendorOptions();
+  applyFiltersAndRender();
+  countTotal.textContent=rawRows.length.toLocaleString('ko-KR');
+}
+
+function populateVendorOptions(){
+  const vendors=[...new Set(rawRows.map(r=>r.vendor).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ko'));
+  vendorSelect.innerHTML='<option value="">모든 구매처</option>'+vendors.map(v=>`<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join("");
+}
+
+function sortRows(){
+  const getter = (r)=>r[sortKey];
+
+  if(sortAsc){
+    viewRows = stableSort(viewRows, getter, true); // 오름차순: 새 비교기
+    return;
+  }
+
+  // 내림차순(기존 방식 유지)
+  viewRows.sort((a,b)=>{
+    let av=a[sortKey];
+    let bv=b[sortKey];
+
+    if(sortKey==='poDate'){
+      av=av?.getTime()??-Infinity;
+      bv=bv?.getTime()??-Infinity;
+      return bv-av; // desc
     }
+    if(sortKey==='unitPrice'||sortKey==='qty'){
+      av=av===""?-Infinity:Number(av);
+      bv=bv===""?-Infinity:Number(bv);
+      return bv-av; // desc
+    }
+    av=String(av??"");
+    bv=String(bv??"");
+    const cmp=av.localeCompare(bv,'ko');
+    return -cmp; // desc
+  });
+}
 
-    document.getElementById('calcBtn').addEventListener('click', ()=>{
-      const ok = computeFromFormulas();
-      setEmptyState(!ok);
-      if (ok) draw();
-    });
+function applyFiltersAndRender(){
+  const vFilter=norm(vendorSelect.value);
+  const q=norm(globalSearch.value).toLowerCase();
+  const qTokens=q?q.split(/\s+/):[];
+  viewRows=rawRows.filter(r=>{
+    const vendorOk=!vFilter||r.vendor===vFilter;
+    let qOk=true;
+    if(qTokens.length){qOk=qTokens.every(t=>r._search.includes(t));}
+    return vendorOk&&qOk;
+  });
+  sortRows();
+  renderTable();
+  countShown.textContent=viewRows.length.toLocaleString('ko-KR');
+}
 
-    document.getElementById('resetBtn').addEventListener('click', () => {
-      if (ddlA.options.length) ddlA.selectedIndex = 0;
-      if (ddlB.options.length) ddlB.selectedIndex = 0;
-      xEl.value = '';
-      const ok = computeFromFormulas();
-      setEmptyState(!ok);
-      if (ok) draw();
-    });
+function renderTable(){
+  const html=viewRows.map(r=>`
+  <tr>
+    <td>${fmtDate(r.poDate)}</td>
+    <td>${escapeHtml(r.ponumber)}</td>
+    <td>${escapeHtml(r.projectCode)}</td>
+    <td>${escapeHtml(r.project)}</td>
+    <td>${escapeHtml(r.type)}</td>
+    <td class="right">${fmtKRW(r.unitPrice)}</td>
+    <td>${escapeHtml(r.unit)}</td>
+    <td>${escapeHtml(r.grade)}</td>
+    <td class="right">${fmtQty(r.qty)}</td>
+    <td>${escapeHtml(r.note)}</td>
+    <td>${escapeHtml(r.vendor)}</td>
+    <td class="hidden">${escapeHtml(r.category)}</td>
+  </tr>`).join("");
+  tbody.innerHTML=html||`<tr><td colspan="12" style="text-align:center;color:var(--muted);padding:22px;">조건에 맞는 데이터가 없습니다.</td></tr>`;
+  updateSortIndicators();
+}
 
-    ddlA.addEventListener('change', ()=>{
-      const ok = computeFromFormulas();
-      setEmptyState(!ok);
-      if (ok) draw();
-    });
+function updateSortIndicators(){
+  document.querySelectorAll('th.sortable').forEach(th=>{
+    th.classList.remove('sort-asc','sort-desc');
+    if(th.dataset.key===sortKey){
+      th.classList.add(sortAsc?'sort-asc':'sort-desc');
+    }
+  });
+}
 
-    ddlB.addEventListener('change', ()=>{
-      const ok = computeFromFormulas();
-      setEmptyState(!ok);
-      if (ok) draw();
-    });
+function escapeHtml(s){return String(s??"").replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]||c));}
 
-    window.addEventListener('resize', ()=>{
-      if (chartCard.style.display === 'none') return;
-      draw();
-    });
+$("#file").addEventListener('change',async(e)=>{
+  const f=e.target.files?.[0]; if(!f)return;
+  const buf=await f.arrayBuffer(); const wb=XLSX.read(buf); loadSheet(wb);
+});
 
-    setEmptyState(true);
-  </script>
+vendorSelect.addEventListener('change',applyFiltersAndRender);
+globalSearch.addEventListener('input',applyFiltersAndRender);
+
+document.querySelectorAll('th.sortable').forEach(th=>{
+  th.addEventListener('click',()=>{
+    const key=th.dataset.key;
+    if(sortKey===key){
+      sortAsc=!sortAsc;  // 클릭 시 토글
+    }else{
+      sortKey=key;
+      sortAsc=false;     // 기본은 내림차순(기존과 동일)
+    }
+    sortRows();
+    renderTable();
+  });
+});
+
+$("#resetBtn").addEventListener('click',()=>{
+  vendorSelect.value="";
+  globalSearch.value="";
+  applyFiltersAndRender();
+});
+
+$("#reloadBtn").addEventListener('click',()=>{loadDefault();});
+
+async function loadDefault(){
+  try{
+    const res=await fetch(DEFAULT_URL(),{cache:'no-store'});
+    if(!res.ok)throw new Error('data.xlsx을 찾을 수 없습니다.');
+    const buf=await res.arrayBuffer();
+    const wb=XLSX.read(buf);
+    loadSheet(wb);
+  }catch(e){
+    tbody.innerHTML=`<tr><td colspan="12" style="text-align:center;color:var(--muted);padding:22px;">기본 파일을 찾을 수 없습니다. 파일을 직접 업로드해주세요.</td></tr>`;
+  }
+}
+loadDefault();
+</script>
 </body>
 </html>
