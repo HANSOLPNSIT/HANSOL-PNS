@@ -5,25 +5,25 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>한솔PNS IT부문 구매팀 페이지</title>
   <style>
-    :root{
-      --bg:#0f172a; --panel:#111827; --ink:#e5e7eb; --muted:#9ca3af; --brand:#60a5fa;
+    :root {
+      --bg:#ffffff; --panel:#f5f6f8; --ink:#111827; --muted:#6b7280; --brand:#2563eb;
     }
     *{box-sizing:border-box}
     body{margin:0; background:var(--bg); color:var(--ink);
-      font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Noto Sans,Ubuntu,Cantarell,Helvetica Neue,Arial}
+      font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,"Noto Sans KR",Ubuntu,Cantarell,"Helvetica Neue",Arial;}
     .layout{display:grid; grid-template-columns:260px 1fr; min-height:100vh}
-    .sidebar{background:var(--panel); border-right:1px solid rgba(255,255,255,.06); padding:18px 14px; position:sticky; top:0; height:100vh; display:flex; flex-direction:column}
+    .sidebar{background:var(--panel); border-right:1px solid #e5e7eb; padding:18px 14px; position:sticky; top:0; height:100vh; display:flex; flex-direction:column}
     h1{margin:0 0 12px; font-size:18px; font-weight:800}
     .sub{color:var(--muted); font-size:12px; margin-bottom:14px}
-    .search{width:100%; padding:10px 12px; border-radius:10px; border:1px solid rgba(255,255,255,.08); background:#0b1220; color:var(--ink); margin-bottom:12px; flex-shrink:0}
+    .search{width:100%; padding:10px 12px; border-radius:10px; border:1px solid #d1d5db; background:#fff; color:var(--ink); margin-bottom:12px; flex-shrink:0}
     .nav{display:flex; flex-direction:column; gap:8px; margin-top:8px; overflow-y:auto; flex:1; min-height:0}
     .nav a{text-decoration:none; color:var(--ink); font-size:14px; padding:10px 10px; border-radius:10px; border:1px solid transparent; display:flex; justify-content:space-between; align-items:center}
-    .nav a:hover{background:#0b1220; border-color:rgba(255,255,255,.08)}
-    .nav a.active{border-color:#ffffff33; background:#0b1220}
+    .nav a:hover{background:#e5e7eb; border-color:#d1d5db}
+    .nav a.active{border-color:#2563eb; background:#e0e7ff}
     .tag{font-size:11px; color:var(--muted)}
     .main{position:relative}
-    .viewer{position:absolute; inset:0; border:0; width:100%; height:100%; background:#0b1220}
-    .topbar{position:sticky; top:0; z-index:1; background:linear-gradient(0deg, rgba(15,23,42,0), rgba(15,23,42,.75)); padding:10px 14px; font-size:12px; color:var(--muted)}
+    .viewer{position:absolute; inset:0; border:0; width:100%; height:100%; background:#ffffff}
+    .topbar{position:sticky; top:0; z-index:1; background:linear-gradient(0deg, rgba(255,255,255,0), rgba(255,255,255,.9)); padding:10px 14px; font-size:12px; color:var(--muted); border-bottom:1px solid #e5e7eb;}
     .note{font-size:11px; color:var(--muted); margin-top:8px; flex-shrink:0}
     @media (max-width:900px){ .layout{grid-template-columns:1fr} .sidebar{position:sticky; top:0; z-index:2} }
   </style>
@@ -45,11 +45,8 @@
   </div>
 
   <script>
-    // ====== 설정 (필요시 수정) ======
-    const EXCLUDE = new Set(["index.html","404.html",".well-known"]); // 자동 제외
-    const CACHE_TTL_MS = 10 * 60 * 1000; // 10분 캐시
-    // data-branch 속성으로 강제 지정 가능: <html data-branch="gh-pages">
-    // =================================
+    const EXCLUDE = new Set(["index.html","404.html",".well-known"]);
+    const CACHE_TTL_MS = 10 * 60 * 1000;
 
     const navEl = document.getElementById('nav');
     const viewer = document.getElementById('viewer');
@@ -57,28 +54,23 @@
     const search = document.getElementById('q');
     const note   = document.getElementById('note');
 
-    // 파일명 → 보기용 제목
     const pretty = (name) => {
       const base = name.replace(/\.(html?|HTML?)$/,'');
       return base
         .replace(/[-_]+/g,' ')
-        .replace(/\b([a-z])/g, m=>m.toUpperCase()); // 단순 Title Case
+        .replace(/\b([a-z])/g, m=>m.toUpperCase());
     };
 
     function detectRepoInfo(){
-      // https://username.github.io/repo/...
-      const host = location.host;           // username.github.io
-      const path = location.pathname;       // /repo/... or /...
+      const host = location.host;
+      const path = location.pathname;
       const user = host.split('.')[0];
       const segs = path.split('/').filter(Boolean);
-      // user site: username.github.io -> repo is username.github.io
-      // project site: username.github.io/repo -> repo is segs[0]
       const repo = segs.length ? segs[0] : `${user}.github.io`;
       return { user, repo };
     }
 
     async function fetchContents(user, repo, branchHint){
-      // 브랜치 우선순위: data-branch → gh-pages → main
       const candidates = [];
       if (branchHint) candidates.push(branchHint);
       candidates.push("gh-pages","main");
@@ -90,7 +82,6 @@
         const res = await fetch(url, { headers: { 'Accept': 'application/vnd.github.v3+json' } });
         if (res.ok){
           const data = await res.json();
-          // data = [{name, type, download_url, path, ...}, ...]
           return { list: data, branch: ref };
         }
       }
@@ -127,7 +118,6 @@
         });
         navEl.appendChild(a);
       });
-      // 활성 유지
       const hashPath = decodeURIComponent(location.hash.slice(1)||"");
       setActive(hashPath || (list[0]?.name||""));
     }
@@ -154,35 +144,30 @@
         try{
           const { list, branch } = await fetchContents(user, repo, branchHint);
           branchUsed = branch;
-          // html/htm 파일만 필터 (루트만; 필요 시 하위 폴더 확장 가능)
           const files = list
             .filter(it => it.type === "file")
             .filter(it => /\.(html?|HTML?)$/.test(it.name))
             .filter(it => ![...EXCLUDE].some(ex => it.name === ex || it.name.startsWith(ex)));
-          // name/title 구성
           pages = files
             .map(it => ({ name: it.name, title: pretty(it.name) }))
             .sort((a,b) => a.title.localeCompare(b.title,'ko'));
           cacheSet(cacheKey, pages);
         }catch(err){
-          note.textContent = "자동 목록 로드 실패: " + err.message + " (캐시/수동 모드로 전환 가능)";
-          pages = []; // 실패 시 비움
+          note.textContent = "자동 목록 로드 실패: " + err.message;
+          pages = [];
         }
       }
 
       if (pages.length === 0){
-        // 안전망: 현재 폴더에서 기본 후보가 있으면 안내
         note.textContent = (note.textContent? note.textContent+" · " : "") +
           "루트에 .html 파일을 추가하면 자동으로 목록에 표시됩니다.";
       }else{
-        note.textContent = `자동 로드됨 (브랜치: ${branchUsed || branchHint || "캐시"}) · 새 파일을 푸시하면 다음 새로고침에 반영됩니다.`;
+        note.textContent = `자동 로드됨 (브랜치: ${branchUsed || branchHint || "캐시"})`;
       }
 
-      // 네비/검색 렌더
       renderNav(pages);
       search.addEventListener('input', () => renderNav(pages, search.value));
 
-      // 초기 열기 (해시 우선)
       const initial = decodeURIComponent(location.hash.slice(1)||"") || (pages[0]?.name);
       if (initial){
         const meta = pages.find(p=>p.name===initial) || pages[0];
