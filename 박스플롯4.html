@@ -87,7 +87,7 @@
       </div>
 
       <div class="hint" style="margin-top:10px;">
-        ※ 헤더가 있을 경우, <span class="mono">분류(P)</span> / <span class="mono">서비스 등급내역(U)</span> / <span class="mono">서비스단가(Z)</span> 를 자동 매핑합니다.
+        ※ 헤더가 있을 경우, <span class="mono">분류(P)</span> / <span class="mono">서비스 등급내역(U)</span> / <span class="mono">서비스단가</span> 를 자동 매핑합니다.
       </div>
       <button id="loadDefault" class="btn" style="margin-top:12px;">기본 파일(data.xlsx) 자동 로드</button>
     </section>
@@ -338,8 +338,8 @@
         margin:{t:48,r:24,b:72,l:84}, showlegend:false,
         title:`${titleCat} · Y축: ${metricName} (Z열)`
       };
-      if (orient==='v'){ layout.xaxis={title:'서비스등급 (U열)',...catAxis}; layout.yaxis=numericAxis; }
-      else { layout.xaxis=numericAxis; layout.yaxis={title:'서비스등급 (U열)',...catAxis}; }
+      if (orient==='v'){ layout.xaxis={title:'서비스등급 ',...catAxis}; layout.yaxis=numericAxis; }
+      else { layout.xaxis=numericAxis; layout.yaxis={title:'서비스등급 ',...catAxis}; }
 
       Plotly.react(els.plot, traces, layout, {responsive:true, displaylogo:false});
     }
