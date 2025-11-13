@@ -72,7 +72,7 @@
     }
 
     #input-panel {
-      flex: 0 0 5.5cm; /* 초기 가로 길이 약 5.5cm */
+      flex: 0 0 7cm;      /* 수정: 초기 가로 길이 약 7cm */
       min-width: 220px;
       max-width: 70%;
     }
@@ -120,6 +120,12 @@
       font-size: 15px;
       font-weight: 600;
       color: #111827;
+    }
+
+    /* 오른쪽 제목(업무협조요청 - 견적) 가운데 정렬 + 폰트 크기 15 */
+    #right-panel .panel-title {
+      text-align: center;
+      font-size: 15px;
     }
 
     form {
@@ -266,7 +272,10 @@
 
           <div>
             <label for="workSkill">업무, 필요기술</label>
-            <textarea id="workSkill" placeholder="업무 내용, 필요 스킬 등을 입력하세요."></textarea>
+            <!-- 기본값: 과업 / 업무상세 / 필요기술 구조 -->
+            <textarea id="workSkill">과업 :
+업무상세 :
+필요기술 :</textarea>
           </div>
 
           <div>
@@ -300,7 +309,8 @@
             <button type="button" id="btnAdd">추가하기</button>
           </div>
           <div class="hint">
-            ※ Enter(단독) 또는 [값 확인] → 오른쪽 &lt;확인&gt;의 [세부내용]에서 미리보기,
+            ※ Enter(단독) 또는 [값 확인] → 오른쪽 &lt;세부내용&gt;에서 미리보기,
+            <br>단, <strong>업무, 필요기술</strong> 입력칸에서는 Enter로 줄바꿈 가능 (미리보기 실행 안 됨)<br>
             Shift+Enter → 줄바꿈
           </div>
         </form>
@@ -309,9 +319,9 @@
       <!-- 가운데: 사이즈 조절 바 -->
       <div class="divider" id="divider"></div>
 
-      <!-- 오른쪽: <확인> -->
+      <!-- 오른쪽: 업무협조요청 - 견적 -->
       <section class="panel" id="right-panel">
-        <h2 class="panel-title">&lt;확인&gt;</h2>
+        <h2 class="panel-title">업무협조요청 - 견적</h2>
 
         <div class="table-section">
           <h3>&lt;세부내용&gt;</h3>
@@ -351,7 +361,7 @@
         project: document.getElementById('project').value.trim(),
         field: document.getElementById('field').value.trim(),
         people: document.getElementById('people').value.trim(),
-        workSkill: document.getElementById('workSkill').value.trim(),
+        workSkill: document.getElementById('workSkill').value, // trim 제거: 과업/업무상세/필요기술 포맷 유지
         env: document.getElementById('env').value.trim(),
         prefer: document.getElementById('prefer').value.trim(),
         period: document.getElementById('period').value.trim(),
@@ -430,7 +440,8 @@
       document.getElementById('project').value = '';
       document.getElementById('field').value = '';
       document.getElementById('people').value = '';
-      document.getElementById('workSkill').value = '';
+      // 과업/업무상세/필요기술 기본 구조 다시 세팅
+      document.getElementById('workSkill').value = '과업 :\n업무상세 :\n필요기술 :';
       document.getElementById('env').value = '';
       document.getElementById('prefer').value = '';
       document.getElementById('period').value = '';
@@ -461,9 +472,13 @@
       renderTable();
     });
 
-    // Enter 키로 미리보기 (Shift+Enter는 줄바꿈)
+    // Enter 키로 미리보기 (단, 업무/필요기술 textarea는 줄바꿈만)
     form.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && !e.shiftKey) {
+        // 업무, 필요기술 입력칸에서는 Enter로 줄바꿈 허용
+        if (e.target.tagName === 'TEXTAREA' && e.target.id === 'workSkill') {
+          return; // 기본 동작(줄바꿈) 유지
+        }
         e.preventDefault();
         doPreview();
       }
@@ -556,7 +571,7 @@
         const layoutRect = layout.getBoundingClientRect();
         let newLeft = e.clientX - layoutRect.left;
 
-        const min = 220;                   // 최소 220px
+        const min = 220;                    // 최소 220px
         const max = layoutRect.width * 0.8; // 최대 전체의 80%
 
         if (newLeft < min) newLeft = min;
