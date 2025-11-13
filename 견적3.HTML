@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>업무협조요청 - 견적</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <!-- Excel 내보내기용 SheetJS -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <!-- 캡처용 html2canvas -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <!-- PDF 생성용 jsPDF -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+      background: #ffffff;
+      color: #111827;
+    }
+
+    header {
+      background: #e5e7eb;  /* gray */
+      border-bottom: 1px solid #d1d5db;
+      padding: 12px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    header h1 {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 600;
+    }
+
+    .header-actions {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    button {
+      border: 1px solid #d1d5db;
+      background: #f9fafb;
+      padding: 6px 10px;
+      border-radius: 6px;
+      font-size: 13px;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background: #e5e7eb;
+    }
+
+    main {
+      padding: 16px 20px 32px;
+    }
+
+    /* 좌우 레이아웃 + 사이즈 조절 */
+    .layout {
+      display: flex;
+      align-items: stretch;
+      width: 100%;
+      gap: 0;
+    }
+
+    #input-panel {
+      flex: 0 0 7cm;      /* 수정: 초기 가로 길이 약 7cm */
+      min-width: 220px;
+      max-width: 70%;
+    }
+
+    #right-panel {
+      flex: 1 1 auto;
+      min-width: 280px;
+    }
+
+    .divider {
+      width: 6px;
+      background: #e5e7eb;
+      cursor: col-resize;
+      margin: 0 4px;
+    }
+
+    .divider:hover {
+      background: #d1d5db;
+    }
+
+    @media (max-width: 900px) {
+      .layout {
+        flex-direction: column;
+      }
+      #input-panel,
+      #right-panel {
+        max-width: 100%;
+        flex: 1 1 auto;
+      }
+      .divider {
+        display: none;
+      }
+    }
+
+    .panel {
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      background: #ffffff;
+      padding: 16px 18px 18px;
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+    }
+
+    .panel-title {
+      margin: 0 0 12px;
+      font-size: 15px;
+      font-weight: 600;
+      color: #111827;
+    }
+
+    /* 오른쪽 제목(업무협조요청 - 견적) 가운데 정렬 + 폰트 크기 15 */
+    #right-panel .panel-title {
+      text-align: center;
+      font-size: 15px;
+    }
+
+    form {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    label {
+      font-size: 12px;
+      font-weight: 500;
+      color: #374151;
+      display: block;
+      margin-bottom: 3px;
+    }
+
+    input[type="text"],
+    input[type="number"],
+    input[type="date"],
+    textarea {
+      width: 100%;
+      border-radius: 6px;
+      border: 1px solid #d1d5db;
+      padding: 7px 8px;
+      font-size: 13px;
+    }
+
+    textarea {
+      resize: vertical;
+      min-height: 50px;
+      max-height: 160px;
+    }
+
+    .field-row {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .form-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .form-actions button.main {
+      background: #111827;
+      color: #ffffff;
+      border-color: #111827;
+    }
+
+    .form-actions button.main:hover {
+      background: #1f2937;
+    }
+
+    .hint {
+      font-size: 11px;
+      color: #6b7280;
+      margin-top: 4px;
+    }
+
+    /* 오른쪽: 세부내용 테이블 */
+    .table-section h3 {
+      margin: 4px 0 8px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11px;
+    }
+
+    thead {
+      background: #f3f4f6;
+    }
+
+    th, td {
+      border: 1px solid #e5e7eb;
+      padding: 4px 6px;
+      vertical-align: top;
+      text-align: left;
+      word-break: break-all;
+    }
+
+    th {
+      font-weight: 600;
+      color: #374151;
+    }
+
+    tbody tr:nth-child(even) {
+      background: #f9fafb;
+    }
+
+    .empty-state {
+      font-size: 12px;
+      color: #9ca3af;
+      padding: 12px 4px 4px;
+    }
+
+    .preview-row {
+      background: #fff7ed !important; /* 미리보기 행 강조 (연한 오렌지톤) */
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>업무협조요청 - 견적</h1>
+    <div class="header-actions">
+      <button type="button" id="btnPdf">PDF다운</button>
+      <button type="button" id="btnExcel">EXCEL다운</button>
+      <button type="button" id="btnCapture">입력창캡쳐</button>
+    </div>
+  </header>
+
+  <main>
+    <div class="layout">
+      <!-- 왼쪽: <입력> -->
+      <section class="panel" id="input-panel">
+        <h2 class="panel-title">&lt;입력&gt;</h2>
+        <form id="inputForm">
+          <div class="field-row">
+            <div>
+              <label for="project">프로젝트</label>
+              <input type="text" id="project" autocomplete="off" />
+            </div>
+            <div>
+              <label for="field">분야</label>
+              <input type="text" id="field" autocomplete="off" />
+            </div>
+          </div>
+
+          <div class="field-row">
+            <div>
+              <label for="people">인원</label>
+              <input type="text" id="people" autocomplete="off" placeholder="예: 1명, 2명" />
+            </div>
+            <div>
+              <label for="onsite">상주여부(지역)</label>
+              <input type="text" id="onsite" autocomplete="off" placeholder="예: 상주(판교), 비상주(재택)" />
+            </div>
+          </div>
+
+          <div>
+            <label for="workSkill">업무, 필요기술</label>
+            <!-- 기본값: 과업 / 업무상세 / 필요기술 구조 -->
+            <textarea id="workSkill">과업 :
+업무상세 :
+필요기술 :</textarea>
+          </div>
+
+          <div>
+            <label for="env">개발 환경</label>
+            <textarea id="env" placeholder="개발 언어, 프레임워크, OS, DB 등"></textarea>
+          </div>
+
+          <div>
+            <label for="prefer">우대사항</label>
+            <textarea id="prefer" placeholder="우대 경력, 자격증, 도메인 경험 등"></textarea>
+          </div>
+
+          <div class="field-row">
+            <div>
+              <label for="period">투입기간</label>
+              <input type="text" id="period" autocomplete="off" placeholder="예: 25.01 ~ 25.06" />
+            </div>
+            <div>
+              <label for="startDate">투입예상일자</label>
+              <input type="date" id="startDate" />
+            </div>
+          </div>
+
+          <div>
+            <label for="vendor">추천업체</label>
+            <input type="text" id="vendor" autocomplete="off" placeholder="예: OO시스템, △△소프트 등" />
+          </div>
+
+          <div class="form-actions">
+            <button type="button" class="main" id="btnPreview">값 확인</button>
+            <button type="button" id="btnAdd">추가하기</button>
+          </div>
+          <div class="hint">
+            ※ Enter(단독) 또는 [값 확인] → 오른쪽 &lt;세부내용&gt;에서 미리보기,
+            <br>단, <strong>업무, 필요기술</strong> 입력칸에서는 Enter로 줄바꿈 가능 (미리보기 실행 안 됨)<br>
+            Shift+Enter → 줄바꿈
+          </div>
+        </form>
+      </section>
+
+      <!-- 가운데: 사이즈 조절 바 -->
+      <div class="divider" id="divider"></div>
+
+      <!-- 오른쪽: 업무협조요청 - 견적 -->
+      <section class="panel" id="right-panel">
+        <h2 class="panel-title">업무협조요청 - 견적</h2>
+
+        <div class="table-section">
+          <h3>&lt;세부내용&gt;</h3>
+          <div id="tableContainer">
+            <div class="empty-state">
+              세부내용이 없습니다. [값 확인]으로 미리보기 → [추가하기]로 목록에 확정할 수 있습니다.
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <script>
+    const { jsPDF } = window.jspdf;
+
+    const form = document.getElementById('inputForm');
+    const tableContainer = document.getElementById('tableContainer');
+
+    const btnPreview = document.getElementById('btnPreview');
+    const btnAdd = document.getElementById('btnAdd');
+    const btnPdf = document.getElementById('btnPdf');
+    const btnExcel = document.getElementById('btnExcel');
+    const btnCapture = document.getElementById('btnCapture');
+
+    const layout = document.querySelector('.layout');
+    const divider = document.getElementById('divider');
+    const inputPanel = document.getElementById('input-panel');
+
+    let entries = [];        // 확정된 목록
+    let nextSeq = 1;         // 순번
+    let previewData = null;  // 미리보기용 데이터 (값 확인 / Enter)
+
+    function getFormData() {
+      return {
+        seq: nextSeq,
+        project: document.getElementById('project').value.trim(),
+        field: document.getElementById('field').value.trim(),
+        people: document.getElementById('people').value.trim(),
+        workSkill: document.getElementById('workSkill').value, // trim 제거: 과업/업무상세/필요기술 포맷 유지
+        env: document.getElementById('env').value.trim(),
+        prefer: document.getElementById('prefer').value.trim(),
+        period: document.getElementById('period').value.trim(),
+        startDate: document.getElementById('startDate').value,
+        onsite: document.getElementById('onsite').value.trim(),
+        vendor: document.getElementById('vendor').value.trim()
+      };
+    }
+
+    function formatDate(yyyy_mm_dd) {
+      if (!yyyy_mm_dd) return '';
+      const parts = yyyy_mm_dd.split('-');
+      if (parts.length !== 3) return yyyy_mm_dd;
+      const [y, m, d] = parts;
+      return `${y}.${m}.${d}`;
+    }
+
+    function renderTable() {
+      if (!entries.length && !previewData) {
+        tableContainer.innerHTML =
+          '<div class="empty-state">세부내용이 없습니다. [값 확인]으로 미리보기 → [추가하기]로 목록에 확정할 수 있습니다.</div>';
+        return;
+      }
+
+      let html = '<table><thead><tr>';
+      const headers = [
+        '순번', '프로젝트', '분야', '인원',
+        '업무,필요기술', '개발 환경', '우대사항',
+        '투입기간', '투입예상일자', '상주여부(지역)', '추천업체'
+      ];
+      headers.forEach(h => {
+        html += `<th>${h}</th>`;
+      });
+      html += '</tr></thead><tbody>';
+
+      // 미리보기 행 (previewData) 먼저 표시
+      if (previewData) {
+        const row = previewData;
+        html += '<tr class="preview-row">';
+        html += `<td>${row.seq}</td>`;
+        html += `<td>${row.project || ''}</td>`;
+        html += `<td>${row.field || ''}</td>`;
+        html += `<td>${row.people || ''}</td>`;
+        html += `<td>${(row.workSkill || '').replace(/\n/g, '<br>')}</td>`;
+        html += `<td>${(row.env || '').replace(/\n/g, '<br>')}</td>`;
+        html += `<td>${(row.prefer || '').replace(/\n/g, '<br>')}</td>`;
+        html += `<td>${row.period || ''}</td>`;
+        html += `<td>${formatDate(row.startDate) || ''}</td>`;
+        html += `<td>${row.onsite || ''}</td>`;
+        html += `<td>${row.vendor || ''}</td>`;
+        html += '</tr>';
+      }
+
+      // 확정된 목록
+      entries.forEach(row => {
+        html += '<tr>';
+        html += `<td>${row.seq}</td>`;
+        html += `<td>${row.project || ''}</td>`;
+        html += `<td>${row.field || ''}</td>`;
+        html += `<td>${row.people || ''}</td>`;
+        html += `<td>${(row.workSkill || '').replace(/\n/g, '<br>')}</td>`;
+        html += `<td>${(row.env || '').replace(/\n/g, '<br>')}</td>`;
+        html += `<td>${(row.prefer || '').replace(/\n/g, '<br>')}</td>`;
+        html += `<td>${row.period || ''}</td>`;
+        html += `<td>${formatDate(row.startDate) || ''}</td>`;
+        html += `<td>${row.onsite || ''}</td>`;
+        html += `<td>${row.vendor || ''}</td>`;
+        html += '</tr>';
+      });
+
+      html += '</tbody></table>';
+      tableContainer.innerHTML = html;
+    }
+
+    function clearForm() {
+      document.getElementById('project').value = '';
+      document.getElementById('field').value = '';
+      document.getElementById('people').value = '';
+      // 과업/업무상세/필요기술 기본 구조 다시 세팅
+      document.getElementById('workSkill').value = '과업 :\n업무상세 :\n필요기술 :';
+      document.getElementById('env').value = '';
+      document.getElementById('prefer').value = '';
+      document.getElementById('period').value = '';
+      document.getElementById('startDate').value = '';
+      document.getElementById('onsite').value = '';
+      document.getElementById('vendor').value = '';
+      document.getElementById('project').focus();
+    }
+
+    // 값 확인 → 미리보기 데이터 갱신
+    function doPreview() {
+      previewData = getFormData();
+      renderTable();
+    }
+
+    // 값 확인 버튼
+    btnPreview.addEventListener('click', () => {
+      doPreview();
+    });
+
+    // 추가하기 버튼
+    btnAdd.addEventListener('click', () => {
+      const data = getFormData();
+      entries.push({ ...data });
+      nextSeq += 1;        // 순번 증가
+      previewData = null;  // 미리보기 비우기 (새 입력 기준)
+      clearForm();
+      renderTable();
+    });
+
+    // Enter 키로 미리보기 (단, 업무/필요기술 textarea는 줄바꿈만)
+    form.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        // 업무, 필요기술 입력칸에서는 Enter로 줄바꿈 허용
+        if (e.target.tagName === 'TEXTAREA' && e.target.id === 'workSkill') {
+          return; // 기본 동작(줄바꿈) 유지
+        }
+        e.preventDefault();
+        doPreview();
+      }
+    });
+
+    // PDF 다운로드 (오른쪽 패널 기준)
+    btnPdf.addEventListener('click', async () => {
+      const target = document.getElementById('right-panel');
+      const canvas = await html2canvas(target, { scale: 2 });
+      const imgData = canvas.toDataURL('image/png');
+
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+
+      const imgProps = pdf.getImageProperties(imgData);
+      const imgWidth = pageWidth;
+      const imgHeight = (imgProps.height * imgWidth) / imgProps.width;
+
+      let position = 0;
+      let heightLeft = imgHeight;
+
+      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+      heightLeft -= pageHeight;
+
+      while (heightLeft > 0) {
+        position = heightLeft - imgHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+        heightLeft -= pageHeight;
+      }
+
+      pdf.save('업무협조요청_세부내용.pdf');
+    });
+
+    // Excel 다운로드
+    btnExcel.addEventListener('click', () => {
+      if (!entries.length) {
+        alert('엑셀로 내보낼 데이터가 없습니다.');
+        return;
+      }
+
+      const header = [
+        '순번', '프로젝트', '분야', '인원',
+        '업무,필요기술', '개발 환경', '우대사항',
+        '투입기간', '투입예상일자', '상주여부(지역)', '추천업체'
+      ];
+
+      const dataRows = entries.map(row => [
+        row.seq,
+        row.project,
+        row.field,
+        row.people,
+        row.workSkill,
+        row.env,
+        row.prefer,
+        row.period,
+        formatDate(row.startDate),
+        row.onsite,
+        row.vendor
+      ]);
+
+      const ws = XLSX.utils.aoa_to_sheet([header, ...dataRows]);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, '세부내용');
+      XLSX.writeFile(wb, '업무협조요청_세부내용.xlsx');
+    });
+
+    // 입력창 캡쳐 (왼쪽 패널만 이미지로)
+    btnCapture.addEventListener('click', async () => {
+      const target = document.getElementById('input-panel');
+      const canvas = await html2canvas(target, { scale: 2 });
+      const link = document.createElement('a');
+      link.href = canvas.toDataURL('image/png');
+      link.download = '업무협조요청_입력창.png';
+      link.click();
+    });
+
+    // 좌/우 사이즈 조절
+    (function setupResizer() {
+      let isResizing = false;
+
+      divider.addEventListener('mousedown', () => {
+        isResizing = true;
+        document.body.style.userSelect = 'none';
+      });
+
+      window.addEventListener('mousemove', (e) => {
+        if (!isResizing) return;
+        const layoutRect = layout.getBoundingClientRect();
+        let newLeft = e.clientX - layoutRect.left;
+
+        const min = 220;                    // 최소 220px
+        const max = layoutRect.width * 0.8; // 최대 전체의 80%
+
+        if (newLeft < min) newLeft = min;
+        if (newLeft > max) newLeft = max;
+
+        inputPanel.style.flexBasis = newLeft + 'px';
+      });
+
+      window.addEventListener('mouseup', () => {
+        if (isResizing) {
+          isResizing = false;
+          document.body.style.userSelect = '';
+        }
+      });
+    })();
+
+    // 초기 렌더
+    renderTable();
+  </script>
+</body>
+</html>
