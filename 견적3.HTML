@@ -17,7 +17,8 @@
 
     body {
       margin: 0;
-      font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto,
+        "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
       background: #ffffff;
       color: #111827;
     }
@@ -63,48 +64,18 @@
       padding: 16px 20px 32px;
     }
 
-    /* 좌우 레이아웃 + 사이즈 조절 */
+    /* 상하 레이아웃: 위에 <입력>, 아래에 업무협조요청 - 견적 */
     .layout {
       display: flex;
-      align-items: stretch;
-      width: 100%;
-      gap: 0;
+      flex-direction: column;
+      gap: 18px;
+      max-width: 1200px;
+      margin: 0 auto;
     }
 
-    #input-panel {
-      flex: 0 0 7cm;      /* 수정: 초기 가로 길이 약 7cm */
-      min-width: 220px;
-      max-width: 70%;
-    }
-
+    #input-panel,
     #right-panel {
-      flex: 1 1 auto;
-      min-width: 280px;
-    }
-
-    .divider {
-      width: 6px;
-      background: #e5e7eb;
-      cursor: col-resize;
-      margin: 0 4px;
-    }
-
-    .divider:hover {
-      background: #d1d5db;
-    }
-
-    @media (max-width: 900px) {
-      .layout {
-        flex-direction: column;
-      }
-      #input-panel,
-      #right-panel {
-        max-width: 100%;
-        flex: 1 1 auto;
-      }
-      .divider {
-        display: none;
-      }
+      width: 100%;
     }
 
     .panel {
@@ -122,10 +93,18 @@
       color: #111827;
     }
 
-    /* 오른쪽 제목(업무협조요청 - 견적) 가운데 정렬 + 폰트 크기 15 */
+    /* 오른쪽 상단 제목 영역 */
     #right-panel .panel-title {
       text-align: center;
-      font-size: 15px;
+      font-size: 15px;      /* 요청 1 */
+      margin-bottom: 4px;
+    }
+
+    .subtitle {
+      text-align: center;
+      font-size: 13px;
+      color: #4b5563;
+      margin-bottom: 24px;  /* 제목과 세부내용 사이 여백 */
     }
 
     form {
@@ -187,9 +166,10 @@
       margin-top: 4px;
     }
 
-    /* 오른쪽: 세부내용 테이블 */
+    /* 세부내용 영역 */
     .table-section h3 {
-      margin: 4px 0 8px;
+      margin-top: 24px;   /* 제목과 세부내용 글자 사이 여백 (위) */
+      margin-bottom: 16px;/* 세부내용 글자 아래 여백 */
       font-size: 13px;
       font-weight: 600;
     }
@@ -204,17 +184,30 @@
       background: #f3f4f6;
     }
 
-    th, td {
+    th,
+    td {
       border: 1px solid #e5e7eb;
-      padding: 4px 6px;
+      padding: 8px 6px;   /* 칸 세로 폭 넓게 */
       vertical-align: top;
-      text-align: left;
       word-break: break-all;
     }
 
+    /* 헤더: 가운데 정렬 (요청 2) */
     th {
       font-weight: 600;
       color: #374151;
+      text-align: center;
+    }
+
+    /* 데이터는 기본 왼쪽 정렬, 순번 열만 가운데 (요청 3) */
+    td {
+      text-align: left;
+    }
+
+    td:first-child {
+      text-align: center;
+      width: 40px;
+      white-space: nowrap;
     }
 
     tbody tr:nth-child(even) {
@@ -228,7 +221,66 @@
     }
 
     .preview-row {
-      background: #fff7ed !important; /* 미리보기 행 강조 (연한 오렌지톤) */
+      background: #fff7ed !important; /* 미리보기 행 강조 */
+    }
+
+    /* 템플릿용 빈 행: 칸이 넓게 보이도록 */
+    .template-row td {
+      height: 80px;
+    }
+
+    /* 예시화면 모달 */
+    .overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.45);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 50;
+    }
+
+    .overlay.active {
+      display: flex;
+    }
+
+    .modal {
+      background: #ffffff;
+      border-radius: 10px;
+      max-width: 980px;
+      width: 95%;
+      max-height: 90vh;
+      padding: 16px 20px 18px;
+      box-shadow: 0 10px 40px rgba(15, 23, 42, 0.25);
+      overflow: auto;
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .modal-header h2 {
+      margin: 0;
+      font-size: 15px;
+      font-weight: 600;
+    }
+
+    .modal-close {
+      border: none;
+      background: transparent;
+      font-size: 20px;
+      line-height: 1;
+      cursor: pointer;
+      padding: 0 4px;
+    }
+
+    .modal-note {
+      font-size: 11px;
+      color: #6b7280;
+      margin-bottom: 8px;
     }
   </style>
 </head>
@@ -237,6 +289,7 @@
     <h1>업무협조요청 - 견적</h1>
     <div class="header-actions">
       <button type="button" id="btnPdf">PDF다운</button>
+      <button type="button" id="btnExample">예시화면</button>
       <button type="button" id="btnExcel">EXCEL다운</button>
       <button type="button" id="btnCapture">입력창캡쳐</button>
     </div>
@@ -244,7 +297,7 @@
 
   <main>
     <div class="layout">
-      <!-- 왼쪽: <입력> -->
+      <!-- 위: <입력> -->
       <section class="panel" id="input-panel">
         <h2 class="panel-title">&lt;입력&gt;</h2>
         <form id="inputForm">
@@ -309,31 +362,78 @@
             <button type="button" id="btnAdd">추가하기</button>
           </div>
           <div class="hint">
-            ※ Enter(단독) 또는 [값 확인] → 오른쪽 &lt;세부내용&gt;에서 미리보기,
-            <br>단, <strong>업무, 필요기술</strong> 입력칸에서는 Enter로 줄바꿈 가능 (미리보기 실행 안 됨)<br>
+            ※ Enter(단독) 또는 [값 확인] → 아래 &lt;세부내용&gt;에서 미리보기,<br>
+            단, <strong>업무, 필요기술</strong> 입력칸에서는 Enter로 줄바꿈 (미리보기 실행 안 됨)<br>
             Shift+Enter → 줄바꿈
           </div>
         </form>
       </section>
 
-      <!-- 가운데: 사이즈 조절 바 -->
-      <div class="divider" id="divider"></div>
-
-      <!-- 오른쪽: 업무협조요청 - 견적 -->
+      <!-- 아래: 업무협조요청 - 견적 -->
       <section class="panel" id="right-panel">
         <h2 class="panel-title">업무협조요청 - 견적</h2>
+        <div class="subtitle">한솔PNS IT부문</div>
 
         <div class="table-section">
           <h3>&lt;세부내용&gt;</h3>
           <div id="tableContainer">
-            <div class="empty-state">
-              세부내용이 없습니다. [값 확인]으로 미리보기 → [추가하기]로 목록에 확정할 수 있습니다.
-            </div>
+            <!-- renderTable에서 채움 -->
           </div>
         </div>
       </section>
     </div>
   </main>
+
+  <!-- 예시화면 모달 -->
+  <div class="overlay" id="exampleOverlay">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>예시화면</h2>
+        <button class="modal-close" id="exampleClose" aria-label="닫기">×</button>
+      </div>
+      <div class="modal-note">
+        실제 출력 형태 예시입니다. (내용은 샘플입니다)
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>순번</th>
+            <th>프로젝트</th>
+            <th>분야</th>
+            <th>인원</th>
+            <th>업무 / 필요 기술 / 개발 환경 / 우대사항</th>
+            <th>투입기간</th>
+            <th>상주</th>
+            <th>투입예상일자</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>1</td>
+            <td>한솔 홈데코 SAP 업그레이드 프로젝트</td>
+            <td>MES (중/고급)</td>
+            <td>1</td>
+            <td>
+              ○ 주요 업무<br>
+              ERP 튜닝(성능) 업무 화면 개선(설계서 기반)<br>
+              Vue.js 및 AgGrid 기반 프론트엔드 화면 개발<br>
+              Java Spring 기반 API 및 배치 모듈 개발<br>
+              Oracle SQL 쿼리 및 성능 개선<br><br>
+              ○ 필요 기술<br>
+              웹 개발 경력 5년 이상(중급 이상개발자, 고급도 가능)<br>
+              Java, Spring Framework 기반 백엔드 개발 역량 보유<br>
+              Vue.js, JavaScript 기반 프론트엔드 개발 경험<br>
+              Oracle SQL/PLSQL 활용 성능 최적화 경험<br>
+              MyBatis 기반 DB 매퍼 개발 경험 등
+            </td>
+            <td>25/12/15 ~ 26/06/30<br>(6.50M/M)</td>
+            <td>서울 신대방동</td>
+            <td>9월 8~9일, 15~16일, 22~23일</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
 
   <script>
     const { jsPDF } = window.jspdf;
@@ -346,14 +446,14 @@
     const btnPdf = document.getElementById('btnPdf');
     const btnExcel = document.getElementById('btnExcel');
     const btnCapture = document.getElementById('btnCapture');
+    const btnExample = document.getElementById('btnExample');
 
-    const layout = document.querySelector('.layout');
-    const divider = document.getElementById('divider');
-    const inputPanel = document.getElementById('input-panel');
+    const exampleOverlay = document.getElementById('exampleOverlay');
+    const exampleClose = document.getElementById('exampleClose');
 
     let entries = [];        // 확정된 목록
     let nextSeq = 1;         // 순번
-    let previewData = null;  // 미리보기용 데이터 (값 확인 / Enter)
+    let previewData = null;  // 미리보기용 데이터
 
     function getFormData() {
       return {
@@ -361,7 +461,7 @@
         project: document.getElementById('project').value.trim(),
         field: document.getElementById('field').value.trim(),
         people: document.getElementById('people').value.trim(),
-        workSkill: document.getElementById('workSkill').value, // trim 제거: 과업/업무상세/필요기술 포맷 유지
+        workSkill: document.getElementById('workSkill').value, // 줄 구조 유지
         env: document.getElementById('env').value.trim(),
         prefer: document.getElementById('prefer').value.trim(),
         period: document.getElementById('period').value.trim(),
@@ -380,9 +480,28 @@
     }
 
     function renderTable() {
+      // 4번/5번: 값 확인 안 눌러도 빈 칸(템플릿) 한 줄은 항상 보이게
       if (!entries.length && !previewData) {
-        tableContainer.innerHTML =
-          '<div class="empty-state">세부내용이 없습니다. [값 확인]으로 미리보기 → [추가하기]로 목록에 확정할 수 있습니다.</div>';
+        let html = '<table><thead><tr>';
+        const headers = [
+          '순번', '프로젝트', '분야', '인원',
+          '업무,필요기술', '개발 환경', '우대사항',
+          '투입기간', '투입예상일자', '상주여부(지역)', '추천업체'
+        ];
+        headers.forEach(h => {
+          html += `<th>${h}</th>`;
+        });
+        html += '</tr></thead><tbody>';
+
+        html += '<tr class="template-row">';
+        for (let i = 0; i < headers.length; i++) {
+          if (i === 0) html += '<td>1</td>'; // 순번 예시 1
+          else html += '<td>&nbsp;</td>';
+        }
+        html += '</tr>';
+
+        html += '</tbody></table>';
+        tableContainer.innerHTML = html;
         return;
       }
 
@@ -397,7 +516,7 @@
       });
       html += '</tr></thead><tbody>';
 
-      // 미리보기 행 (previewData) 먼저 표시
+      // 미리보기 행 먼저
       if (previewData) {
         const row = previewData;
         html += '<tr class="preview-row">';
@@ -440,7 +559,6 @@
       document.getElementById('project').value = '';
       document.getElementById('field').value = '';
       document.getElementById('people').value = '';
-      // 과업/업무상세/필요기술 기본 구조 다시 세팅
       document.getElementById('workSkill').value = '과업 :\n업무상세 :\n필요기술 :';
       document.getElementById('env').value = '';
       document.getElementById('prefer').value = '';
@@ -451,40 +569,36 @@
       document.getElementById('project').focus();
     }
 
-    // 값 확인 → 미리보기 데이터 갱신
     function doPreview() {
       previewData = getFormData();
       renderTable();
     }
 
-    // 값 확인 버튼
     btnPreview.addEventListener('click', () => {
       doPreview();
     });
 
-    // 추가하기 버튼
     btnAdd.addEventListener('click', () => {
       const data = getFormData();
       entries.push({ ...data });
-      nextSeq += 1;        // 순번 증가
-      previewData = null;  // 미리보기 비우기 (새 입력 기준)
+      nextSeq += 1;
+      previewData = null;
       clearForm();
       renderTable();
     });
 
-    // Enter 키로 미리보기 (단, 업무/필요기술 textarea는 줄바꿈만)
+    // Enter → 미리보기 (단, 업무/필요기술 textarea는 줄바꿈만)
     form.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && !e.shiftKey) {
-        // 업무, 필요기술 입력칸에서는 Enter로 줄바꿈 허용
         if (e.target.tagName === 'TEXTAREA' && e.target.id === 'workSkill') {
-          return; // 기본 동작(줄바꿈) 유지
+          return; // 줄바꿈만
         }
         e.preventDefault();
         doPreview();
       }
     });
 
-    // PDF 다운로드 (오른쪽 패널 기준)
+    // PDF 다운로드: 업무협조요청 - 견적(오른쪽 패널만)
     btnPdf.addEventListener('click', async () => {
       const target = document.getElementById('right-panel');
       const canvas = await html2canvas(target, { scale: 2 });
@@ -547,48 +661,32 @@
       XLSX.writeFile(wb, '업무협조요청_세부내용.xlsx');
     });
 
-    // 입력창 캡쳐 (왼쪽 패널만 이미지로)
+    // 캡쳐: 업무협조요청 - 견적(오른쪽 패널만, 요청 9)
     btnCapture.addEventListener('click', async () => {
-      const target = document.getElementById('input-panel');
+      const target = document.getElementById('right-panel');
       const canvas = await html2canvas(target, { scale: 2 });
       const link = document.createElement('a');
       link.href = canvas.toDataURL('image/png');
-      link.download = '업무협조요청_입력창.png';
+      link.download = '업무협조요청_견적_화면.png';
       link.click();
     });
 
-    // 좌/우 사이즈 조절
-    (function setupResizer() {
-      let isResizing = false;
+    // 예시화면 모달 열기/닫기 (요청 8)
+    btnExample.addEventListener('click', () => {
+      exampleOverlay.classList.add('active');
+    });
 
-      divider.addEventListener('mousedown', () => {
-        isResizing = true;
-        document.body.style.userSelect = 'none';
-      });
+    exampleClose.addEventListener('click', () => {
+      exampleOverlay.classList.remove('active');
+    });
 
-      window.addEventListener('mousemove', (e) => {
-        if (!isResizing) return;
-        const layoutRect = layout.getBoundingClientRect();
-        let newLeft = e.clientX - layoutRect.left;
+    exampleOverlay.addEventListener('click', (e) => {
+      if (e.target === exampleOverlay) {
+        exampleOverlay.classList.remove('active');
+      }
+    });
 
-        const min = 220;                    // 최소 220px
-        const max = layoutRect.width * 0.8; // 최대 전체의 80%
-
-        if (newLeft < min) newLeft = min;
-        if (newLeft > max) newLeft = max;
-
-        inputPanel.style.flexBasis = newLeft + 'px';
-      });
-
-      window.addEventListener('mouseup', () => {
-        if (isResizing) {
-          isResizing = false;
-          document.body.style.userSelect = '';
-        }
-      });
-    })();
-
-    // 초기 렌더
+    // 초기 렌더: 템플릿 한 줄 보여주기
     renderTable();
   </script>
 </body>
