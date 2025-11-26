@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ITO 리스트 · 계약서 데이터뷰셋</title>
+
+  <!-- SheetJS & FileSaver -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
+
+  <style>
+    :root {
+      --bg:#ffffff;
+      --panel:#f9fafb;
+      --border:#d1d5db;
+      --ink:#111827;
+      --muted:#6b7280;
+      --brand:#2563eb;
+      --brand-soft:#dbeafe;
+    }
+    *{box-sizing:border-box;}
+    body{
+      margin:0;
+      font-family:system-ui,-apple-system,Segoe UI,Roboto,"Apple SD Gothic Neo","Noto Sans KR",sans-serif;
+      background:var(--bg);
+      color:var(--ink);
+    }
+    header{
+      padding:16px 20px;
+      border-bottom:1px solid var(--border);
+      background:#ffffff;
+      position:sticky;
+      top:0;
+      z-index:10;
+    }
+    header h1{
+      margin:0 0 4px;
+      font-size:18px;
+      font-weight:600;
+    }
+    header p{
+      margin:0;
+      font-size:13px;
+      color:var(--muted);
+    }
+    main{
+      padding:16px 20px 32px;
+      display:grid;
+      grid-template-columns:minmax(0,2fr) minmax(0,1fr);
+      gap:16px;
+    }
+    @media (max-width:960px){
+      main{grid-template-columns:1fr;}
+    }
+
+    .card{
+      background:var(--panel);
+      border-radius:12px;
+      border:1px solid var(--border);
+      padding:14px 16px 16px;
+      box-shadow:0 8px 16px rgba(15,23,42,.06);
+    }
+    .card h2{
+      margin:0 0 6px;
+      font-size:16px;
+      font-weight:600;
+    }
+    .card p{
+      margin:0 0 12px;
+      font-size:12px;
+      color:var(--muted);
+    }
+
+    .controls{
+      display:flex;
+      flex-wrap:wrap;
+      gap:8px;
+      align-items:center;
+      margin-bottom:10px;
+    }
+    input[type="file"]{
+      font-size:12px;
+    }
+    button{
+      border-radius:8px;
+      border:1px solid var(--brand);
+      background:var(--brand);
+      color:white;
+      padding:6px 10px;
+      font-size:12px;
+      cursor:pointer;
+      display:inline-flex;
+      align-items:center;
+      gap:4px;
+    }
+    button.secondary{
+      border-color:var(--border);
+      background:#ffffff;
+      color:var(--ink);
+    }
+    button:disabled{
+      opacity:.5;
+      cursor:default;
+    }
+
+    .table-wrap{
+      border-radius:10px;
+      border:1px solid var(--border);
+      overflow:auto;
+      max-height:70vh;
+      background:#ffffff;
+    }
+    table{
+      border-collapse:collapse;
+      width:100%;
+      min-width:900px;
+      font-size:12px;
+    }
+    thead{
+      position:sticky;
+      top:0;
+      z-index:5;
+      background:#f3f4f6;
+    }
+    th, td{
+      padding:6px 8px;
+      border-bottom:1px solid #e5e7eb;
+      text-align:left;
+      white-space:nowrap;
+    }
+    th{
+      font-weight:600;
+      font-size:11px;
+      color:#374151;
+    }
+    tbody tr{
+      cursor:pointer;
+    }
+    tbody tr:nth-child(even){
+      background:#f9fafb;
+    }
+    tbody tr:hover{
+      background:var(--brand-soft);
+    }
+
+    .badge{
+      display:inline-flex;
+      align-items:center;
+      padding:2px 6px;
+      border-radius:999px;
+      font-size:11px;
+      border:1px solid var(--border);
+      background:#ffffff;
+    }
+    .badge.ok{
+      border-color:#16a34a33;
+      background:#dcfce7;
+      color:#166534;
+    }
+    .badge.warn{
+      border-color:#f9731633;
+      background:#ffedd5;
+      color:#c2410c;
+    }
+    .hint{
+      font-size:11px;
+      color:var(--muted);
+      margin-top:6px;
+      line-height:1.5;
+    }
+    .status-line{
+      font-size:12px;
+      color:var(--muted);
+      margin-top:4px;
+    }
+    .status-strong{
+      color:#111827;
+      font-weight:500;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>ITO 리스트 · 계약서 데이터뷰셋</h1>
+    <p>리스트 시트 기준 주요 컬럼을 보여주고, 행 클릭 시 해당 발주번호로 계약서 양식을 다운로드합니다.</p>
+  </header>
+
+  <main>
+    <!-- 왼쪽: 리스트 데이터뷰셋 -->
+    <section class="card">
+      <h2>1. ITO 리스트 업로드 · 데이터뷰셋</h2>
+      <p>파일의 <strong>리스트</strong> 시트 1행 헤더 기준으로 아래 컬럼만 조회합니다.</p>
+
+      <div class="controls">
+        <input type="file" id="itoFile" accept=".xlsx,.xls" />
+        <button id="reloadBtn" class="secondary" disabled>다시 불러오기</button>
+      </div>
+      <div class="status-line" id="statusLine">파일을 선택해 주세요. (예: ITO.xlsx)</div>
+      <div class="hint">
+        • 사용 컬럼: 계약서발송, 계약서수신, 완료여부, 발주일, 발주번호, 발주시 프로젝트코드, 프로젝트명, 공급처, 내용, 제안가, 발주금액, 업체선정, 지급조건<br/>
+        • <span class="status-strong">각 행을 클릭하면</span> 해당 발주번호로 계약서 시트(G7)에 값을 넣고, xlsx를 다운로드합니다.
+      </div>
+
+      <div class="table-wrap" id="tableWrap">
+        <table id="listTable">
+          <thead>
+            <tr id="tableHeaderRow"></tr>
+          </thead>
+          <tbody id="tableBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 오른쪽: 계약서 다운로드 안내 + 합치기 기능 -->
+    <section class="card">
+      <h2>2. 계약서 다운로드 & 파일 합치기</h2>
+      <p>행 클릭 → 계약서 시트 G7에 발주번호 입력 → 통째로 xlsx 다운로드.  
+         다운로드한 파일은 Excel 또는 구글시트로 열어 함수/Apps Script가 계산되게 사용합니다.</p>
+
+      <div class="status-line">
+        계약서 시트 상태:
+        <span id="contractStatus" class="badge">파일 미선택</span>
+      </div>
+
+      <div class="hint">
+        • 이 화면에서 수식 계산은 하지 않고, <strong>계약서 시트 구조 그대로</strong> 저장합니다.<br/>
+        • 구글시트에서 ITO 파일을 관리한다면, 다운로드한 xlsx를 다시 구글시트에 올리면
+          시트 내 함수와 Apps Script 로직이 실행됩니다.
+      </div>
+
+      <hr style="margin:14px 0; border:none; border-top:1px solid var(--border);" />
+
+      <h3 style="margin:0 0 6px; font-size:14px;">3. 계약서 파일 합치기</h3>
+      <p style="margin:0 0 10px; font-size:12px; color:var(--muted);">
+        이미 만들어진 개별 계약서 xlsx 파일을 여러 개 업로드해서,  
+        하나의 통합 xlsx 파일로 합쳐 다운로드합니다. (계약서 시트를 파일별로 각각 별도 시트로 추가)
+      </p>
+
+      <div class="controls">
+        <input type="file" id="mergeFiles" accept=".xlsx,.xls" multiple />
+        <button id="mergeBtn" disabled>계약서 합본 다운로드</button>
+      </div>
+      <div class="hint">
+        • 각 업로드 파일에서 <strong>‘계약서’ 시트가 있으면 우선 사용</strong>, 없으면 첫 번째 시트를 사용해 합쳐집니다.<br/>
+        • 합본 파일은 <code>계약서_합본.xlsx</code> 이름으로 다운로드됩니다.
+      </div>
+    </section>
+  </main>
+
+  <script>
+    // ===== 공통 유틸 =====
+    function fileToArrayBuffer(file){
+      return new Promise((resolve, reject)=>{
+        const reader = new FileReader();
+        reader.onload = e => resolve(e.target.result);
+        reader.onerror = err => reject(err);
+        reader.readAsArrayBuffer(file);
+      });
+    }
+
+    // ===== 전역 상태 =====
+    let itoWorkbook = null;
+    let itoFileName = '';
+    const LIST_SHEET_NAME = '리스트';
+    const CONTRACT_SHEET_NAME = '계약서';
+
+    const TARGET_HEADERS = [
+      '계약서발송',
+      '계약서수신',
+      '완료여부',
+      '발주일',
+      '발주번호',
+      '발주시 프로젝트코드',
+      '프로젝트명',
+      '공급처',
+      '내용',
+      '제안가',
+      '발주금액',
+      '업체선정',
+      '지급조건'
+    ];
+
+    // ===== DOM 참조 =====
+    const itoFileInput   = document.getElementById('itoFile');
+    const reloadBtn      = document.getElementById('reloadBtn');
+    const statusLine     = document.getElementById('statusLine');
+    const contractStatus = document.getElementById('contractStatus');
+    const tableHeaderRow = document.getElementById('tableHeaderRow');
+    const tableBody      = document.getElementById('tableBody');
+
+    const mergeFilesInput = document.getElementById('mergeFiles');
+    const mergeBtn        = document.getElementById('mergeBtn');
+
+    // ===== ITO 파일 로드 & 리스트 표시 =====
+    async function loadITOFile(file){
+      try{
+        statusLine.textContent = '파일 읽는 중...';
+        const data = await fileToArrayBuffer(file);
+        itoWorkbook = XLSX.read(data, { type:'array' });
+        itoFileName = file.name || 'ITO.xlsx';
+
+        const sheetName = itoWorkbook.SheetNames.includes(LIST_SHEET_NAME)
+          ? LIST_SHEET_NAME
+          : itoWorkbook.SheetNames[0];
+
+        const ws = itoWorkbook.Sheets[sheetName];
+        if(!ws){
+          alert('리스트 시트를 찾을 수 없습니다.');
+          return;
+        }
+
+        // 2차원 배열로 읽기 (header:1)
+        const rows = XLSX.utils.sheet_to_json(ws, { header:1, defval:'' });
+        if(rows.length === 0){
+          alert('리스트 시트에 데이터가 없습니다.');
+          return;
+        }
+
+        const headerRow = rows[0];
+        const headerIndexMap = {};
+        headerRow.forEach((h, idx) => {
+          if(TARGET_HEADERS.includes(h)){
+            headerIndexMap[h] = idx;
+          }
+        });
+
+        // 일부 컬럼이 없을 수도 있으니 체크
+        const missing = TARGET_HEADERS.filter(h => headerIndexMap[h] === undefined);
+        if(missing.length){
+          console.warn('없는 헤더:', missing);
+        }
+
+        // 테이블 헤더 렌더
+        tableHeaderRow.innerHTML = '';
+        TARGET_HEADERS.forEach(h => {
+          if(headerIndexMap[h] !== undefined){
+            const th = document.createElement('th');
+            th.textContent = h;
+            tableHeaderRow.appendChild(th);
+          }
+        });
+        // 클릭 안내용 컬럼
+        const thAction = document.createElement('th');
+        thAction.textContent = '계약서 다운로드';
+        tableHeaderRow.appendChild(thAction);
+
+        // 바디 렌더
+        tableBody.innerHTML = '';
+        for(let i=1; i<rows.length; i++){
+          const row = rows[i];
+          // 발주번호, 공급처 둘 다 공백이면 스킵
+          const poNoIdx = headerIndexMap['발주번호'];
+          const vendorIdx = headerIndexMap['공급처'];
+          const poVal = poNoIdx !== undefined ? row[poNoIdx] : '';
+          const vendorVal = vendorIdx !== undefined ? row[vendorIdx] : '';
+          if(String(poVal).trim() === '' && String(vendorVal).trim() === ''){
+            continue;
+          }
+
+          const tr = document.createElement('tr');
+          tr.dataset.rowIndex = i;
+          tr.dataset.po = poVal;
+
+          TARGET_HEADERS.forEach(h => {
+            if(headerIndexMap[h] !== undefined){
+              const td = document.createElement('td');
+              let cellVal = row[headerIndexMap[h]];
+              // 간단 포맷 (발주일/금액 등은 여기서 필요시 가공 가능)
+              td.textContent = cellVal;
+              tr.appendChild(td);
+            }
+          });
+
+          const tdAction = document.createElement('td');
+          const btn = document.createElement('button');
+          btn.className = 'secondary';
+          btn.type = 'button';
+          btn.textContent = '다운로드';
+          btn.addEventListener('click', (e)=>{
+            e.stopPropagation();
+            downloadContractForRow(poVal);
+          });
+          tdAction.appendChild(btn);
+          tr.appendChild(tdAction);
+
+          // 행 클릭 시도 동일 동작
+          tr.addEventListener('click', ()=>{
+            downloadContractForRow(poVal);
+          });
+
+          tableBody.appendChild(tr);
+        }
+
+        statusLine.textContent = `파일 로드 완료: ${itoFileName}  ·  총 ${tableBody.children.length}건 표시`;
+        reloadBtn.disabled = false;
+
+        // 계약서 시트 존재 여부 표시
+        if(itoWorkbook.SheetNames.includes(CONTRACT_SHEET_NAME)){
+          contractStatus.textContent = '계약서 시트 감지됨';
+          contractStatus.className = 'badge ok';
+        }else{
+          contractStatus.textContent = '계약서 시트 없음 (전체 파일만 다운로드)';
+          contractStatus.className = 'badge warn';
+        }
+
+      }catch(err){
+        console.error(err);
+        alert('ITO 파일을 읽는 중 오류가 발생했습니다.');
+        statusLine.textContent = '오류가 발생했습니다. 콘솔을 확인해 주세요.';
+      }
+    }
+
+    // ===== 계약서 다운로드 (G7에 발주번호 세팅 후 xlsx 저장) =====
+    function downloadContractForRow(poValue){
+      if(!itoWorkbook){
+        alert('먼저 ITO 파일을 업로드해 주세요.');
+        return;
+      }
+      if(!poValue || String(poValue).trim() === ''){
+        alert('해당 행에 발주번호가 없습니다.');
+        return;
+      }
+
+      // 계약서 시트가 있는 경우: G7에 발주번호 세팅
+      if(itoWorkbook.SheetNames.includes(CONTRACT_SHEET_NAME)){
+        const wsContract = itoWorkbook.Sheets[CONTRACT_SHEET_NAME];
+        const cellAddr = 'G7';
+        if(!wsContract[cellAddr]) wsContract[cellAddr] = { t:'s', v:String(poValue) };
+        else{
+          wsContract[cellAddr].v = String(poValue);
+          wsContract[cellAddr].t = 's';
+        }
+        // 표시 값(w)을 같이 맞춰주면 보기 좋음
+        wsContract[cellAddr].w = String(poValue);
+      }
+
+      // 통째로 xlsx 쓰기 (계약서/리스트/업체정보 등 모두 포함)
+      const out = XLSX.write(itoWorkbook, { bookType:'xlsx', type:'array' });
+      const blob = new Blob([out], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const safePo = String(poValue).replace(/[\\/:*?"<>|]/g,'_');
+      const baseName = itoFileName ? itoFileName.replace(/\.[^.]+$/,'') : 'ITO';
+      const fileName = `${baseName}_계약서_${safePo}.xlsx`;
+      saveAs(blob, fileName);
+    }
+
+    // ===== 계약서 합치기 기능 =====
+    mergeFilesInput.addEventListener('change', ()=>{
+      const files = mergeFilesInput.files;
+      mergeBtn.disabled = !files || files.length === 0;
+    });
+
+    mergeBtn.addEventListener('click', async ()=>{
+      const files = mergeFilesInput.files;
+      if(!files || files.length === 0){
+        alert('합칠 계약서 파일을 먼저 선택해 주세요.');
+        return;
+      }
+      mergeBtn.disabled = true;
+      mergeBtn.textContent = '합치는 중...';
+
+      try{
+        const mergedWb = XLSX.utils.book_new();
+
+        for(let i=0; i<files.length; i++){
+          const file = files[i];
+          const data = await fileToArrayBuffer(file);
+          const wb = XLSX.read(data, { type:'array' });
+
+          // 계약서 시트 우선, 없으면 첫 시트
+          let srcSheetName = wb.SheetNames.includes(CONTRACT_SHEET_NAME)
+            ? CONTRACT_SHEET_NAME
+            : wb.SheetNames[0];
+          const srcSheet = wb.Sheets[srcSheetName];
+          if(!srcSheet) continue;
+
+          // 새 시트 이름: 파일명 기준
+          let newSheetName = (file.name || `sheet_${i+1}`).replace(/\.[^.]+$/,'').slice(0,31);
+          // 중복 방지
+          let baseName = newSheetName;
+          let idx = 1;
+          while(mergedWb.SheetNames.includes(newSheetName)){
+            const suffix = `_${idx++}`;
+            newSheetName = (baseName.slice(0, 31 - suffix.length)) + suffix;
+          }
+
+          // 시트 그대로 붙이기
+          XLSX.utils.book_append_sheet(mergedWb, srcSheet, newSheetName);
+        }
+
+        const out = XLSX.write(mergedWb, { bookType:'xlsx', type:'array' });
+        const blob = new Blob([out], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        saveAs(blob, '계약서_합본.xlsx');
+
+      }catch(err){
+        console.error(err);
+        alert('계약서 파일을 합치는 중 오류가 발생했습니다.');
+      }finally{
+        mergeBtn.disabled = false;
+        mergeBtn.textContent = '계약서 합본 다운로드';
+      }
+    });
+
+    // ===== 이벤트 바인딩 =====
+    itoFileInput.addEventListener('change', ()=>{
+      const file = itoFileInput.files && itoFileInput.files[0];
+      if(!file) return;
+      loadITOFile(file);
+    });
+
+    reloadBtn.addEventListener('click', ()=>{
+      if(itoFileInput.files && itoFileInput.files[0]){
+        loadITOFile(itoFileInput.files[0]);
+      }
+    });
+  </script>
+</body>
+</html>
