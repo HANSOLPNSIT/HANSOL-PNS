@@ -139,6 +139,25 @@
 
   .empty{padding:40px;text-align:center;color:var(--ink-soft);font-size:12.5px;}
   .count-badge{font-size:11px;color:var(--ink-soft);font-weight:400;text-transform:none;letter-spacing:0;}
+
+  .bp-tooltip{
+    position:fixed;
+    display:none;
+    z-index:100;
+    background:#1c1c1a;
+    color:#fff;
+    border-radius:4px;
+    padding:9px 12px;
+    font-size:11.5px;
+    line-height:1.6;
+    pointer-events:none;
+    box-shadow:0 4px 14px rgba(0,0,0,.25);
+    white-space:nowrap;
+  }
+  .bp-tooltip .t-title{font-weight:700;margin-bottom:4px;font-size:12px;}
+  .bp-tooltip .t-row{display:flex;justify-content:space-between;gap:16px;}
+  .bp-tooltip .t-row span:first-child{color:#b8b8b3;}
+  .bp-tooltip .t-row span:last-child{font-family:'SFMono-Regular','Consolas','Menlo',monospace;}
 </style>
 </head>
 <body>
@@ -147,6 +166,9 @@
   <h1>용역단가 박스플롯</h1>
   <span class="sub">기술분류(대분류) · 기술세부(중분류) · 서비스등급 · 서비스단가 · 구매처명</span>
 </header>
+
+<div class="bp-tooltip" id="bpTooltip"></div>
+
 
 <div class="wrap">
 
@@ -349,6 +371,34 @@ function fmt(n){
   return Math.round(n).toLocaleString('ko-KR');
 }
 
+// ---------- 툴팁 ----------
+const bpTooltip = document.getElementById('bpTooltip');
+function showTooltip(s){
+  bpTooltip.innerHTML = `
+    <div class="t-title">${s.grade} <span style="font-weight:400;color:#b8b8b3;">(n=${s.n})</span></div>
+    <div class="t-row"><span>최소</span><span>${fmt(s.min)}</span></div>
+    <div class="t-row"><span>Q1</span><span>${fmt(s.q1)}</span></div>
+    <div class="t-row"><span>중앙값</span><span>${fmt(s.med)}</span></div>
+    <div class="t-row"><span>Q3</span><span>${fmt(s.q3)}</span></div>
+    <div class="t-row"><span>최대</span><span>${fmt(s.max)}</span></div>
+    <div class="t-row"><span>평균</span><span>${fmt(s.mean)}</span></div>
+  `;
+  bpTooltip.style.display = 'block';
+}
+function moveTooltip(e){
+  const pad = 16;
+  let x = e.clientX + pad;
+  let y = e.clientY + pad;
+  const tw = bpTooltip.offsetWidth, th = bpTooltip.offsetHeight;
+  if(x + tw > window.innerWidth - 8) x = e.clientX - tw - pad;
+  if(y + th > window.innerHeight - 8) y = e.clientY - th - pad;
+  bpTooltip.style.left = x + 'px';
+  bpTooltip.style.top = y + 'px';
+}
+function hideTooltip(){
+  bpTooltip.style.display = 'none';
+}
+
 function currentFiltered(){
   return RAW.filter(d=>
     (state.major==='전체' || d['대분류']===state.major) &&
@@ -383,10 +433,10 @@ function render(){
   const globalMin = Math.min(0, ...groupStats.map(s=>s.min));
 
   // ---- SVG geometry ----
-  const rowH = 54;
+  const rowH = 76;
   const leftPad = 190;
   const rightPad = 40;
-  const topPad = 30;
+  const topPad = 18;
   const bottomPad = 40;
   const chartW = 860;
   const chartH = rowH*groupStats.length;
@@ -395,6 +445,9 @@ function render(){
 
   function xScale(v){
     return leftPad + (v-globalMin)/(globalMax-globalMin || 1) * chartW;
+  }
+  function fmtShort(n){
+    return Math.round(n/10000).toLocaleString('ko-KR') + '만';
   }
 
   // x axis ticks
@@ -415,11 +468,13 @@ function render(){
   svg += `<text x="${leftPad+chartW/2}" y="${H-6}" font-size="10.5" fill="#6b6b66" text-anchor="middle">서비스단가 (원)</text>`;
 
   groupStats.forEach((s, i)=>{
-    const cy = topPad + i*rowH + rowH/2;
+    const rowTop = topPad + i*rowH;
+    const cy = rowTop + 48;
     const boxTop = cy - 11, boxH = 22;
+    const labelY = rowTop + 15;
 
     // row separator
-    svg += `<line x1="${leftPad}" y1="${topPad+i*rowH}" x2="${leftPad+chartW}" y2="${topPad+i*rowH}" stroke="#eeeee9" stroke-width="1"/>`;
+    svg += `<line x1="${leftPad}" y1="${rowTop}" x2="${leftPad+chartW}" y2="${rowTop}" stroke="#eeeee9" stroke-width="1"/>`;
 
     // label
     svg += `<text x="${leftPad-14}" y="${cy+4}" font-size="12" fill="#1c1c1a" text-anchor="end" font-weight="600">${s.grade}</text>`;
@@ -435,6 +490,19 @@ function render(){
     svg += `<rect x="${xScale(s.q1)}" y="${boxTop}" width="${Math.max(1,xScale(s.q3)-xScale(s.q1))}" height="${boxH}" fill="var(--box-fill)" stroke="#8a8a85" stroke-width="1.2"/>`;
     // median
     svg += `<line x1="${xScale(s.med)}" y1="${boxTop}" x2="${xScale(s.med)}" y2="${boxTop+boxH}" stroke="var(--median)" stroke-width="2.2"/>`;
+
+    // 최소/Q1/중앙값/Q3/최대 값 라벨 (항상 표시, 대각선 배치로 겹침 최소화)
+    const labelPoints = [
+      {v:s.min, x:xScale(s.whiskerLow)},
+      {v:s.q1,  x:xScale(s.q1)},
+      {v:s.med, x:xScale(s.med)},
+      {v:s.q3,  x:xScale(s.q3)},
+      {v:s.max, x:xScale(s.whiskerHigh)},
+    ];
+    labelPoints.forEach(p=>{
+      svg += `<line x1="${p.x}" y1="${labelY+3}" x2="${p.x}" y2="${cy-6}" stroke="#c7c7c2" stroke-width="1" stroke-dasharray="1.5,1.5"/>`;
+      svg += `<text x="${p.x}" y="${labelY}" font-size="9" fill="#6b6b66" text-anchor="start" transform="rotate(-40 ${p.x} ${labelY})" class="mono">${fmtShort(p.v)}</text>`;
+    });
 
     // outliers
     s.outliers.forEach(o=>{
@@ -452,10 +520,21 @@ function render(){
         svg += vendorMarkerSvg(x,y,vi);
       });
     });
+
+    // 호버 툴팁용 히트 영역 (박스+수염 전체를 덮는 투명 사각형)
+    svg += `<rect class="hit-row" data-idx="${i}" x="${leftPad}" y="${rowTop}" width="${chartW}" height="${rowH}" fill="transparent" style="cursor:pointer;"/>`;
   });
 
   svg += `</svg>`;
   chartHost.innerHTML = svg;
+
+  // ---- 호버 툴팁 ----
+  chartHost.querySelectorAll('.hit-row').forEach(el=>{
+    const s = groupStats[Number(el.dataset.idx)];
+    el.addEventListener('mouseenter', ()=> showTooltip(s));
+    el.addEventListener('mousemove', (e)=> moveTooltip(e));
+    el.addEventListener('mouseleave', ()=> hideTooltip());
+  });
 
   // ---- 통계 테이블 ----
   let thead = `<tr><th>서비스등급</th><th>건수</th><th>최소</th><th>Q1</th><th>중앙값</th><th>Q3</th><th>최대</th><th>평균</th></tr>`;
