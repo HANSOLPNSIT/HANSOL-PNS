@@ -216,6 +216,14 @@
 <script>
 const DATA_FILE = '용역단가data.xlsx';
 const SHEET_NAME = '용역단가';
+// 원본(raw) 시트의 실제 컬럼명 → 이 화면에서 쓰는 표준 명칭으로 매핑
+const SOURCE_ALIASES = {
+  '대분류': ['기술분류'],
+  '중분류': ['기술세부'],
+  '서비스등급': ['서비스등급내역','서비스 등급내역'],
+  '서비스단가': ['서비스단가'],
+  '구매처명': ['구매처명']
+};
 
 let RAW = [];
 
@@ -526,30 +534,37 @@ async function loadData(){
 
     if(rowsRaw.length === 0) throw new Error('시트에 데이터가 없습니다.');
 
-    const CANON = ['대분류','중분류','서비스등급','서비스단가','구매처명'];
     const normKey = k => String(k).replace(/\s+/g,'').trim();
     const actualHeaders = Object.keys(rowsRaw[0]);
     const mapping = {};
-    CANON.forEach(c=>{
-      mapping[c] = actualHeaders.find(h => normKey(h) === normKey(c)) || null;
+    Object.keys(SOURCE_ALIASES).forEach(canon=>{
+      const candidates = SOURCE_ALIASES[canon];
+      let found = null;
+      for(const cand of candidates){
+        found = actualHeaders.find(h => normKey(h) === normKey(cand));
+        if(found) break;
+      }
+      mapping[canon] = found;
     });
 
-    const missing = CANON.filter(c => !mapping[c]);
+    const missing = Object.keys(mapping).filter(c => !mapping[c]);
     if(missing.length){
       throw new Error(
-        `다음 컬럼을 시트에서 찾지 못했습니다: ${missing.join(', ')}\n` +
+        `다음 컬럼을 시트("${sheetName}")에서 찾지 못했습니다: ${missing.join(', ')}\n` +
         `시트에서 감지된 실제 헤더: ${actualHeaders.join(', ')}`
       );
     }
 
+    const clean = v => (v===null || v===undefined || String(v).trim()==='') ? '미분류' : String(v).trim();
+
     RAW = rowsRaw
       .filter(r => typeof r[mapping['서비스단가']] === 'number')
       .map(r => ({
-        '대분류': r[mapping['대분류']] ?? '미분류',
-        '중분류': r[mapping['중분류']] ?? '미분류',
-        '서비스등급': r[mapping['서비스등급']] ?? '미분류',
+        '대분류': clean(r[mapping['대분류']]),
+        '중분류': clean(r[mapping['중분류']]),
+        '서비스등급': clean(r[mapping['서비스등급']]),
         '서비스단가': r[mapping['서비스단가']],
-        '구매처명': r[mapping['구매처명']] ?? '미분류',
+        '구매처명': clean(r[mapping['구매처명']]),
       }));
 
     if(RAW.length === 0) throw new Error('서비스단가가 숫자인 유효한 데이터 행을 찾지 못했습니다.');
@@ -558,8 +573,7 @@ async function loadData(){
   }catch(err){
     loadMsg.innerHTML = `엑셀 데이터를 불러오지 못했습니다.<br><br>
       <span class="mono" style="font-size:11px; white-space:pre-wrap;">${err.message}</span><br><br>
-      이 페이지와 같은 폴더(또는 저장소)에 <b>${DATA_FILE}</b> 파일이 있는지,<br>
-      시트명이 <b>${SHEET_NAME}</b> 인지 확인해주세요.<br>
+      이 페이지와 같은 폴더(또는 저장소)에 <b>${DATA_FILE}</b> 파일이 있는지 확인해주세요.<br>
       (또한 파일을 그대로 더블클릭해서 여는 경우 브라우저 보안 정책상 로컬 파일을 불러오지 못할 수 있습니다 — GitHub Pages 등 웹 서버를 통해 열어야 합니다.)`;
   }
 }
