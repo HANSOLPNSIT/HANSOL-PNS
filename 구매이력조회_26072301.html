@@ -7,34 +7,34 @@
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
   :root {
-    --bg:#0f172a; --panel:#111827; --ink:#e5e7eb; --muted:#9ca3af;
-    --brand:#60a5fa; --border:#1f2937;
+    --bg:#ffffff; --panel:#f8fafc; --ink:#1f2937; --muted:#6b7280;
+    --brand:#2563eb; --border:#e2e8f0;
   }
   *{box-sizing:border-box;}
   body{background:var(--bg);color:var(--ink);
     font-family:system-ui,-apple-system,Segoe UI,Roboto,"Apple SD Gothic Neo","Noto Sans KR",sans-serif;
     margin:0;}
   header{padding:18px 20px;border-bottom:1px solid var(--border);
-    position:sticky;top:0;background:linear-gradient(180deg,rgba(15,23,42,.98),rgba(15,23,42,.92));
+    position:sticky;top:0;background:linear-gradient(180deg,rgba(255,255,255,.98),rgba(255,255,255,.92));
     backdrop-filter:blur(6px);z-index:10;}
-  h1{margin:0 0 10px;font-size:20px;font-weight:700;}
+  h1{margin:0 0 10px;font-size:20px;font-weight:700;color:var(--ink);}
   .controls{display:grid;gap:10px;grid-template-columns:1.4fr 1fr;}
   .controls label{font-size:12px;color:var(--muted);}
   .control{display:grid;gap:6px;}
   select,input[type="search"],input[list],button,input[type="file"]{
-    background:#0b1220;border:1px solid var(--border);color:var(--ink);
+    background:#ffffff;border:1px solid var(--border);color:var(--ink);
     padding:10px 12px;border-radius:12px;outline:none;font-size:14px;}
   select{cursor:pointer;}
-  select option{background:#0b1220;color:var(--ink);}
-  button.primary{background:var(--brand);border-color:transparent;color:#0b1220;font-weight:700;}
-  button.ghost{background:transparent;border:1px solid var(--border);}
+  select option{background:#ffffff;color:var(--ink);}
+  button.primary{background:var(--brand);border-color:transparent;color:#ffffff;font-weight:700;}
+  button.ghost{background:#ffffff;border:1px solid var(--border);color:var(--ink);}
   main{padding:16px 20px 80px;}
-  table{width:100%;border-collapse:collapse;background:#0b1220;border:1px solid var(--border);
-    border-radius:12px;overflow:hidden;}
-  th{position:sticky;top:0;background:#0d1526;color:var(--muted);font-weight:600;font-size:12px;
+  table{width:100%;border-collapse:collapse;background:#ffffff;border:1px solid var(--border);
+    border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.06);}
+  th{position:sticky;top:0;background:var(--panel);color:var(--muted);font-weight:600;font-size:12px;
     border-bottom:1px solid var(--border);padding:10px 8px;text-align:left;cursor:pointer;
-    user-select:none;}
-  th:hover{background:#111b33;color:var(--brand);}
+    user-select:none;word-break:keep-all;white-space:normal;line-height:1.35;}
+  th:hover{background:#eef2f7;color:var(--brand);}
   th.sortable::after{content:" ⬍";opacity:0.3;margin-left:4px;}
   th.sort-asc::after{content:" ⬆";opacity:1;}
   th.sort-desc::after{content:" ⬇";opacity:1;}
@@ -53,7 +53,7 @@
   <h1>구매 이력 조회 · 업체 드롭다운 + 전체 검색</h1>
   <div class="controls">
     <div class="control">
-      <label>구글 스프레드시트 실시간 연동 (용역단가data · 용역단가 시트)</label>
+      <label>용역단가 현황 (실시간 반영)</label>
       <div class="summary" style="display:flex;gap:10px;align-items:center;">
         <span id="countShown">0</span>건 / 총 <span id="countTotal">0</span>건
         <span id="loadStatus" class="status"></span>
@@ -85,7 +85,7 @@
         <th class="sortable" data-key="project">프로젝트명</th>
         <th class="sortable" data-key="techCategory">기술분류</th>
         <th class="sortable" data-key="techDetail">기술세부</th>
-        <th class="sortable" data-key="residency">상주여부</th>
+        <th class="sortable" data-key="residency" style="min-width:56px;">상주 여부</th>
         <th class="sortable right" data-key="unitPrice">서비스단가</th>
         <th class="sortable" data-key="unit">서비스단위</th>
         <th class="sortable" data-key="grade">서비스 등급내역</th>
@@ -101,15 +101,12 @@
 
 <div class="footer">
   <button id="resetBtn" class="ghost">필터 초기화</button>
-  <button id="reloadBtn" class="primary">구글시트 새로고침</button>
+  <button id="reloadBtn" class="primary">새로고침</button>
 </div>
 
 <script>
 /* =========================================================
- * 구글 스프레드시트 실시간 연동 설정
- * - 시트 공유설정: "링크가 있는 모든 사용자(뷰어)" 이상으로 되어 있어야
- *   브라우저에서 직접 fetch 가능
- * - gviz/tq 엔드포인트는 CSV로 데이터를 반환하며 CORS를 허용함
+ * 데이터 실시간 연동 설정 (내부 데이터 소스 엔드포인트)
  * =======================================================*/
 const SHEET_ID = "1SYxMT6gHs3otmwop9jkqzJNxpPrbO9Gz1QtZvnG2yss";
 const SHEET_GID = "1649603460"; // 용역단가 시트
@@ -379,15 +376,15 @@ async function loadFromGoogleSheet(){
   setStatus('불러오는 중...',false);
   try{
     const res=await fetch(DEFAULT_URL(),{cache:'no-store'});
-    if(!res.ok)throw new Error('구글시트를 불러올 수 없습니다. (HTTP '+res.status+')');
+    if(!res.ok)throw new Error('데이터를 불러올 수 없습니다. (HTTP '+res.status+')');
     const csvText=await res.text();
     const wb=XLSX.read(csvText,{type:'string'});
     loadSheet(wb);
     const now=new Date();
     setStatus('마지막 갱신: '+now.toLocaleTimeString('ko-KR'),false);
   }catch(e){
-    setStatus('구글시트 연동 실패 — 공유 설정을 확인해주세요.',true);
-    tbody.innerHTML=`<tr><td colspan="14" style="text-align:center;color:var(--muted);padding:22px;">구글시트 데이터를 불러올 수 없습니다.<br>시트 공유 설정이 "링크가 있는 모든 사용자(뷰어)"로 되어 있는지 확인해주세요.</td></tr>`;
+    setStatus('데이터 연동 실패 — 잠시 후 다시 시도해주세요.',true);
+    tbody.innerHTML=`<tr><td colspan="14" style="text-align:center;color:var(--muted);padding:22px;">데이터를 불러올 수 없습니다.<br>잠시 후 새로고침 버튼을 눌러 다시 시도해주세요.</td></tr>`;
   }
 }
 
