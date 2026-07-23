@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>한솔PNS IT부문 구매팀 페이지</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📋</text></svg>">
   <style>
     :root {
       --bg:#ffffff; --panel:#f5f6f8; --ink:#111827; --muted:#6b7280; --brand:#2563eb;
@@ -24,11 +25,23 @@
     .main{position:relative}
     .viewer{position:absolute; inset:0; border:0; width:100%; height:100%; background:#ffffff}
     .note{font-size:11px; color:var(--muted); margin-top:8px; flex-shrink:0}
+    .back-btn{
+      display:none;
+      align-items:center;
+      gap:6px;
+      margin:10px 12px;
+      padding:8px 12px;
+      border-radius:10px;
+      border:1px solid #d1d5db;
+      background:#fff;
+      color:var(--ink);
+      font-size:13px;
+      font-weight:600;
+      cursor:pointer;
+      width:fit-content;
+    }
 
-    /* ===== 모바일 레이아웃 수정 =====
-       기존 grid(2열 -> 1열)에서는 사이드바가 height:100vh로 고정되어
-       본문(.main) 행이 실질적으로 0px 높이가 되어 iframe이 화면에 보이지 않는 문제가 있었음.
-       모바일에서는 세로 flex로 바꾸고 본문에 flex:1 + 명시적 높이를 줘서 항상 보이도록 수정. */
+    /* ===== 모바일: 크기/배치 관련 스타일만 담당. 화면 전환(보이기/숨기기)은 JS가 인라인 style로 직접 제어 ===== */
     @media (max-width:900px){
       .layout{
         display:flex;
@@ -40,40 +53,21 @@
         position:relative;
         top:auto;
         height:auto;
-        max-height:45vh;
+        max-height:60vh;
         flex-shrink:0;
       }
       .main{
         flex:1 1 auto;
         min-height:55vh;
-      }
-      .back-btn{
-        display:flex;
-        align-items:center;
-        gap:6px;
-        margin:10px 12px;
-        padding:8px 12px;
-        border-radius:10px;
-        border:1px solid #d1d5db;
-        background:#fff;
-        color:var(--ink);
-        font-size:13px;
-        font-weight:600;
-        cursor:pointer;
-        width:fit-content;
-      }
-      /* 기본(카테고리 목록) 상태: 본문/뒤로가기 숨김 */
-      .layout:not(.show-content) .main{ display:none; }
-      /* 콘텐츠 보기 상태: 사이드바 숨김, 본문 전체화면 */
-      .layout.show-content .sidebar{ display:none; }
-      .layout.show-content .main{
         display:flex;
         flex-direction:column;
-        min-height:100vh;
       }
-      .layout.show-content .viewer{ position:relative; flex:1; }
+      .viewer{
+        position:relative;
+        flex:1;
+        min-height:0;
+      }
     }
-    .back-btn{ display:none; }
   </style>
 </head>
 <body>
@@ -100,12 +94,38 @@
     const viewer = document.getElementById('viewer');
     const search = document.getElementById('q');
     const note   = document.getElementById('note');
-    const layoutEl = document.querySelector('.layout');
+    const sidebarEl = document.querySelector('.sidebar');
+    const mainEl = document.querySelector('.main');
     const backBtn = document.getElementById('backBtn');
 
-    backBtn.addEventListener('click', () => {
-      layoutEl.classList.remove('show-content');
-    });
+    function isMobile(){
+      return window.matchMedia('(max-width:900px)').matches;
+    }
+
+    // 모바일: 카테고리 목록 화면으로
+    function showList(){
+      if (!isMobile()) return;
+      sidebarEl.style.display = 'flex';
+      mainEl.style.display = 'none';
+      backBtn.style.display = 'none';
+    }
+    // 모바일: 선택한 콘텐츠 화면으로 (카테고리 목록은 닫힘)
+    function showContent(){
+      if (!isMobile()) return;
+      sidebarEl.style.display = 'none';
+      mainEl.style.display = 'flex';
+      backBtn.style.display = 'flex';
+    }
+    // 데스크톱으로 리사이즈되면 인라인 스타일 제거 (CSS 기본값으로 복귀)
+    function resetForDesktop(){
+      if (isMobile()) return;
+      sidebarEl.style.display = '';
+      mainEl.style.display = '';
+      backBtn.style.display = '';
+    }
+    window.addEventListener('resize', resetForDesktop);
+
+    backBtn.addEventListener('click', showList);
 
     const pretty = (name) => {
       const base = name.replace(/\.(html?|HTML?)$/,'');
@@ -168,6 +188,7 @@
           openPage(p.name, p.title);
           setActive(p.name);
           history.replaceState(null, "", a.href);
+          showContent();
         });
         navEl.appendChild(a);
       });
@@ -180,10 +201,9 @@
         a.classList.toggle('active', a.dataset.path === path);
       });
     }
-    function openPage(path, title, switchView=true){
+    function openPage(path, title){
       viewer.src = path;
       document.title = `한솔PNS IT부문 구매팀 페이지 · ${title||path}`;
-      if (switchView) layoutEl.classList.add('show-content');
     }
 
     async function init(){
@@ -221,10 +241,13 @@
       renderNav(pages);
       search.addEventListener('input', () => renderNav(pages, search.value));
 
+      // 첫 로드에서는 항상 카테고리 목록 화면부터 보여줌 (모바일 기준)
+      showList();
+
       const initial = decodeURIComponent(location.hash.slice(1)||"") || (pages[0]?.name);
       if (initial){
         const meta = pages.find(p=>p.name===initial) || pages[0];
-        openPage(meta.name, meta.title, false);
+        openPage(meta.name, meta.title);
         setActive(meta.name);
         if(!location.hash) history.replaceState(null, "", "#"+encodeURIComponent(meta.name));
       }
@@ -235,6 +258,7 @@
       if (!path) return;
       openPage(path, pretty(path));
       setActive(path);
+      showContent();
     });
 
     init();
