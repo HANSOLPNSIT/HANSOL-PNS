@@ -184,17 +184,6 @@
   <div id="controlsPanel" style="display:none;">
 
   <div class="panel">
-    <div class="panel-head">
-      데이터 연결 확인 (구글시트 1행 헤더 실시간 매핑)
-      <span class="count-badge" id="mappingCountBadge"></span>
-    </div>
-    <div class="panel-body" style="overflow-x:auto;">
-      <table class="stat-table" id="mappingTable" style="width:auto;"></table>
-      <div class="legend-note" style="margin-top:9px;">화면 항목이 구글시트 1행의 어떤 헤더 셀에서 값을 읽어오고 있는지 페이지를 열 때마다 실시간으로 확인합니다.</div>
-    </div>
-  </div>
-
-  <div class="panel">
     <div class="panel-head">필터</div>
     <div class="panel-body">
       <div class="filter-row">
@@ -206,7 +195,20 @@
           <label>중분류</label>
           <select id="selMid"></select>
         </div>
+        <div class="field">
+          <label>PO생성일 시작</label>
+          <input type="date" id="dateFrom">
+        </div>
+        <div class="field">
+          <label>PO생성일 종료</label>
+          <input type="date" id="dateTo">
+        </div>
+        <div class="field" style="justify-content:flex-end;">
+          <label>&nbsp;</label>
+          <button id="dateResetBtn" type="button" style="font-size:11.5px;padding:6px 10px;border:1px solid var(--line-strong);background:#fff;border-radius:2px;cursor:pointer;color:var(--ink-soft);">전체 기간 보기</button>
+        </div>
       </div>
+      <div class="legend-note" style="margin-top:8px;">기본값은 오늘로부터 최근 1년간 데이터입니다. 날짜는 PO생성일 기준입니다.</div>
     </div>
   </div>
 
@@ -348,6 +350,37 @@ selMajor.addEventListener('change', ()=>{
 });
 selMid.addEventListener('change', ()=>{ state.mid = selMid.value; render(); });
 
+// ---------- UI: 기간 필터 ----------
+const dateFromEl = document.getElementById('dateFrom');
+const dateToEl = document.getElementById('dateTo');
+const dateResetBtn = document.getElementById('dateResetBtn');
+
+function toDateInputValue(d){
+  const y = d.getFullYear(), m = String(d.getMonth()+1).padStart(2,'0'), day = String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${day}`;
+}
+function defaultDateRange(){
+  const to = new Date();
+  const from = new Date(to);
+  from.setFullYear(to.getFullYear()-1);
+  return {from, to};
+}
+dateFromEl.addEventListener('change', ()=>{
+  state.dateFrom = dateFromEl.value ? new Date(dateFromEl.value + 'T00:00:00') : null;
+  render();
+});
+dateToEl.addEventListener('change', ()=>{
+  state.dateTo = dateToEl.value ? new Date(dateToEl.value + 'T23:59:59') : null;
+  render();
+});
+dateResetBtn.addEventListener('click', ()=>{
+  dateFromEl.value = '';
+  dateToEl.value = '';
+  state.dateFrom = null;
+  state.dateTo = null;
+  render();
+});
+
 // ---------- UI: 업체추가 ----------
 const vendorSelect = document.getElementById('vendorSelect');
 const vendorInput = document.getElementById('vendorInput');
@@ -465,6 +498,21 @@ function showTooltip(s, vStats){
   `;
   bpTooltip.style.display = 'block';
 }
+function showVendorTooltip(vs, grade){
+  bpTooltip.innerHTML = `
+    <div class="t-title" style="display:flex;align-items:center;gap:6px;">
+      <span style="width:9px;height:9px;border-radius:50%;background:${vs.color.fill};border:1.5px solid ${vs.color.stroke};display:inline-block;flex:none;"></span>
+      ${vs.vendor} <span style="font-weight:400;color:#b8b8b3;">· ${grade} (n=${vs.n})</span>
+    </div>
+    <div class="t-row"><span>최소</span><span>${fmt(vs.min)}</span></div>
+    <div class="t-row"><span>Q1</span><span>${fmt(vs.q1)}</span></div>
+    <div class="t-row"><span>중앙값</span><span>${fmt(vs.med)}</span></div>
+    <div class="t-row"><span>Q3</span><span>${fmt(vs.q3)}</span></div>
+    <div class="t-row"><span>최대</span><span>${fmt(vs.max)}</span></div>
+    <div class="t-row"><span>평균</span><span>${fmt(vs.mean)}</span></div>
+  `;
+  bpTooltip.style.display = 'block';
+}
 function moveTooltip(e){
   const pad = 16;
   let x = e.clientX + pad;
@@ -479,10 +527,20 @@ function hideTooltip(){
   bpTooltip.style.display = 'none';
 }
 
+function inDateRange(d){
+  if(!state.dateFrom && !state.dateTo) return true;
+  if(!d['_poDate']) return false;
+  const t = d['_poDate'].getTime();
+  if(state.dateFrom && t < state.dateFrom.getTime()) return false;
+  if(state.dateTo && t > state.dateTo.getTime()) return false;
+  return true;
+}
+
 function currentFiltered(){
   return RAW.filter(d=>
     (state.major==='전체' || d['대분류']===state.major) &&
-    (state.mid==='전체' || d['중분류']===state.mid)
+    (state.mid==='전체' || d['중분류']===state.mid) &&
+    inDateRange(d)
   );
 }
 
@@ -653,6 +711,7 @@ function render(){
 
     // 업체별 미니 박스플롯 (기존 박스플롯 위/아래에 겹쳐 표시, 파스텔톤으로 구분)
     const vendorStatsThisRow = [];
+    const vendorHitRects = [];
     state.vendors.forEach((v, vi)=>{
       const pts = filtered.filter(d=>d['서비스등급']===s.grade && d['구매처명']===v).map(d=>d['서비스단가']);
       if(pts.length===0) return;
@@ -673,6 +732,9 @@ function render(){
       svg += `<rect x="${xScale(vs.q1)}" y="${vBoxTop}" width="${Math.max(2,xScale(vs.q3)-xScale(vs.q1))}" height="${vBoxH}" fill="${color.fill}" fill-opacity="0.85" stroke="${color.stroke}" stroke-width="1.1"/>`;
       // 중앙값
       svg += `<line x1="${xScale(vs.med)}" y1="${vBoxTop}" x2="${xScale(vs.med)}" y2="${vBoxTop+vBoxH}" stroke="${color.stroke}" stroke-width="1.6"/>`;
+
+      // 업체별 개별 호버 히트 영역 (일반 행 툴팁보다 위에 그려서 우선권을 가짐)
+      vendorHitRects.push(`<rect class="hit-vendor" data-row="${i}" data-vendor="${encodeURIComponent(v)}" x="${leftPad}" y="${vy-8}" width="${chartW}" height="16" fill="transparent" style="cursor:pointer;"/>`);
     });
 
     // 호버 툴팁 데이터 기록
@@ -680,6 +742,8 @@ function render(){
 
     // 호버 툴팁용 히트 영역 (박스+수염 전체를 덮는 투명 사각형)
     svg += `<rect class="hit-row" data-idx="${i}" x="${leftPad}" y="${rowTop}" width="${chartW}" height="${rowH}" fill="transparent" style="cursor:pointer;"/>`;
+    // 업체별 히트 영역은 일반 히트 영역보다 나중에(위에) 그려서 우선 반응하도록 함
+    svg += vendorHitRects.join('');
   });
 
   svg += `</svg>`;
@@ -693,6 +757,16 @@ function render(){
     el.addEventListener('mouseenter', ()=> showTooltip(s, vStats));
     el.addEventListener('mousemove', (e)=> moveTooltip(e));
     el.addEventListener('mouseleave', ()=> hideTooltip());
+  });
+  chartHost.querySelectorAll('.hit-vendor').forEach(el=>{
+    const rowIdx = Number(el.dataset.row);
+    const vendorName = decodeURIComponent(el.dataset.vendor);
+    const grade = groupStats[rowIdx].grade;
+    const vs = rowVendorStats[rowIdx].find(x=>x.vendor===vendorName);
+    if(!vs) return;
+    el.addEventListener('mouseenter', (e)=>{ e.stopPropagation(); showVendorTooltip(vs, grade); });
+    el.addEventListener('mousemove', (e)=>{ e.stopPropagation(); moveTooltip(e); });
+    el.addEventListener('mouseleave', (e)=>{ e.stopPropagation(); hideTooltip(); });
   });
 
   renderVendorLists();
@@ -730,11 +804,28 @@ function initFromData(){
   allGrades = Array.from(new Set(RAW.map(d=>d['서비스등급']))).sort(gradeSort);
   allVendors = Array.from(new Set(RAW.map(d=>d['구매처명']))).sort((a,b)=>a.localeCompare(b,'ko'));
 
+  const anyDateAvailable = RAW.some(d=>d['_poDate']);
+  const {from, to} = defaultDateRange();
   state = {
     major:'전체',
     mid:'전체',
-    vendors: []
+    vendors: [],
+    dateFrom: anyDateAvailable ? from : null,
+    dateTo: anyDateAvailable ? to : null,
   };
+  if(anyDateAvailable){
+    dateFromEl.value = toDateInputValue(from);
+    dateToEl.value = toDateInputValue(to);
+    dateFromEl.disabled = false;
+    dateToEl.disabled = false;
+  } else {
+    dateFromEl.value = '';
+    dateToEl.value = '';
+    dateFromEl.disabled = true;
+    dateToEl.disabled = true;
+    dateFromEl.title = 'PO생성일 데이터를 인식하지 못해 기간 필터를 사용할 수 없습니다.';
+    dateToEl.title = dateFromEl.title;
+  }
 
   fillSelect(selMajor, majors, state.major);
   fillSelect(selMid, midByMajor[state.major], state.mid);
@@ -756,7 +847,7 @@ async function loadData(){
     if(/^\s*<(!DOCTYPE|html)/i.test(csvText)){
       throw new Error('구글시트 대신 로그인/권한 페이지가 반환됐습니다. 시트 공유 설정을 "링크가 있는 모든 사용자 - 뷰어"로 바꿔주세요.');
     }
-    const wb = XLSX.read(csvText, {type:'string'});
+    const wb = XLSX.read(csvText, {type:'string', cellDates:true});
     const sheetName = wb.SheetNames[0];
     const ws = wb.Sheets[sheetName];
     const rowsRaw = XLSX.utils.sheet_to_json(ws, {defval:null});
@@ -796,23 +887,6 @@ async function loadData(){
       detailMapping[canon] = found;
     });
 
-    // ---- 데이터 연결 확인 표: 화면 항목 ↔ 구글시트 실제 헤더 실시간 표시 ----
-    const mappingCountBadge = document.getElementById('mappingCountBadge');
-    const mappingTable = document.getElementById('mappingTable');
-    const allMappingRows = [
-      ...Object.keys(SOURCE_ALIASES).map(canon=>({canon, found:mapping[canon], required:true})),
-      ...Object.keys(DETAIL_ALIASES).map(canon=>({canon, found:detailMapping[canon], required:false})),
-    ];
-    mappingCountBadge.textContent = `${allMappingRows.filter(r=>r.found).length}/${allMappingRows.length}개 연결됨`;
-    mappingTable.innerHTML =
-      '<tr><th>화면 표시명</th><th>구글시트 1행 헤더</th><th>상태</th></tr>' +
-      allMappingRows.map(r=>`
-        <tr>
-          <td style="text-align:left;">${r.canon}${r.required ? '' : ' <span style="color:#b8b8b3;">(참고)</span>'}</td>
-          <td style="text-align:left;" class="mono">${r.found ? r.found : '-'}</td>
-          <td style="text-align:center;">${r.found ? '✅ 연결됨' : (r.required ? '❌ 못 찾음' : '⚪ 없음')}</td>
-        </tr>`).join('');
-
     const clean = v => (v===null || v===undefined || String(v).trim()==='') ? '미분류' : String(v).trim();
     const fmtDetailVal = v => {
       if(v===null || v===undefined || String(v).trim()==='') return '';
@@ -833,6 +907,8 @@ async function loadData(){
         Object.keys(DETAIL_ALIASES).forEach(canon=>{
           row[canon] = detailMapping[canon] ? fmtDetailVal(r[detailMapping[canon]]) : '';
         });
+        const rawPoDate = detailMapping['PO생성일'] ? r[detailMapping['PO생성일']] : null;
+        row['_poDate'] = (rawPoDate instanceof Date && !isNaN(rawPoDate)) ? rawPoDate : null;
         return row;
       });
 
