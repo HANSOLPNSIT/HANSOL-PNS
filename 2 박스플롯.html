@@ -272,8 +272,9 @@
 </div>
 
 <script>
-const DATA_FILE = '용역단가data.xlsx';
-const SHEET_NAME = '용역단가';
+const GOOGLE_SHEET_ID = '1SYxMT6gHs3otmwop9jkqzJNxpPrbO9Gz1QtZvnG2yss';
+const GOOGLE_SHEET_GID = '803604323';
+const DATA_URL = `https://docs.google.com/spreadsheets/d/${GOOGLE_SHEET_ID}/export?format=csv&gid=${GOOGLE_SHEET_GID}`;
 // 원본(raw) 시트의 실제 컬럼명 → 이 화면에서 쓰는 표준 명칭으로 매핑
 const SOURCE_ALIASES = {
   '대분류': ['기술분류'],
@@ -737,11 +738,14 @@ function initFromData(){
 async function loadData(){
   loadPanel.style.display = '';
   try{
-    const res = await fetch(DATA_FILE);
+    const res = await fetch(DATA_URL);
     if(!res.ok) throw new Error('HTTP ' + res.status);
-    const buf = await res.arrayBuffer();
-    const wb = XLSX.read(buf, {type:'array', cellDates:true});
-    const sheetName = wb.SheetNames.includes(SHEET_NAME) ? SHEET_NAME : wb.SheetNames[0];
+    const csvText = await res.text();
+    if(/^\s*<(!DOCTYPE|html)/i.test(csvText)){
+      throw new Error('구글시트 대신 로그인/권한 페이지가 반환됐습니다. 시트 공유 설정을 "링크가 있는 모든 사용자 - 뷰어"로 바꿔주세요.');
+    }
+    const wb = XLSX.read(csvText, {type:'string'});
+    const sheetName = wb.SheetNames[0];
     const ws = wb.Sheets[sheetName];
     const rowsRaw = XLSX.utils.sheet_to_json(ws, {defval:null});
 
@@ -763,7 +767,7 @@ async function loadData(){
     const missing = Object.keys(mapping).filter(c => !mapping[c]);
     if(missing.length){
       throw new Error(
-        `다음 컬럼을 시트("${sheetName}")에서 찾지 못했습니다: ${missing.join(', ')}\n` +
+        `다음 컬럼을 시트에서 찾지 못했습니다: ${missing.join(', ')}\n` +
         `시트에서 감지된 실제 헤더: ${actualHeaders.join(', ')}`
       );
     }
@@ -807,10 +811,11 @@ async function loadData(){
 
     initFromData();
   }catch(err){
-    loadMsg.innerHTML = `엑셀 데이터를 불러오지 못했습니다.<br><br>
+    loadMsg.innerHTML = `구글시트 데이터를 불러오지 못했습니다.<br><br>
       <span class="mono" style="font-size:11px; white-space:pre-wrap;">${err.message}</span><br><br>
-      이 페이지와 같은 폴더(또는 저장소)에 <b>${DATA_FILE}</b> 파일이 있는지 확인해주세요.<br>
-      (또한 파일을 그대로 더블클릭해서 여는 경우 브라우저 보안 정책상 로컬 파일을 불러오지 못할 수 있습니다 — GitHub Pages 등 웹 서버를 통해 열어야 합니다.)`;
+      구글시트 공유 설정이 <b>"링크가 있는 모든 사용자 - 뷰어(또는 편집자)"</b>로 되어 있는지 확인해주세요.<br>
+      (비공개 상태면 브라우저에서 로그인 페이지가 반환되어 데이터를 읽을 수 없습니다.)<br>
+      또한 이 페이지를 더블클릭으로 로컬에서 열면 브라우저 보안 정책상 요청이 막힐 수 있습니다 — GitHub Pages 등 웹 서버를 통해 열어야 합니다.`;
   }
 }
 
