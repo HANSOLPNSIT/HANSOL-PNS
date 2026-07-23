@@ -105,7 +105,16 @@
       margin-right:6px;
       color:var(--muted);
     }
-    tr.month-row.open .caret{transform:rotate(90deg)}
+    tr.month-row.open .caret, tr.po-row.open .caret{transform:rotate(90deg)}
+tr.po-row{cursor:pointer}
+tr.po-row:hover td{background:#f4f4f5}
+tr.reason-row td{
+  background:#fafafa;
+  border-top:none;
+  padding:8px 10px;
+  font-size:13px;
+}
+tr.reason-row.hidden{display:none}
     .pill{
       display:inline-block;
       padding:2px 8px;
@@ -196,7 +205,7 @@
         </thead>
         <tbody></tbody>
       </table>
-      <div class="note">※ 데이터가 없는 월은 '-'로 표시됩니다.</div>
+      <div class="note">※ 데이터가 없는 월은 '-'로 표시됩니다. 상세 내역에서 PO 행을 클릭하면 절감사유를 확인할 수 있습니다.</div>
     </div>
 
     <div class="footer">
@@ -225,28 +234,51 @@ const clampYear = (y)=> Math.min(2030, Math.max(2021, y));
 $('#sheetId').value = '1SYxMT6gHs3otmwop9jkqzJNxpPrbO9Gz1QtZvnG2yss';
 $('#sheetGid').value = '803604323';
 
+// 절감사유 시트 (같은 스프레드시트 내 PO번호 ↔ 절감사유 매핑 시트)
+const REASON_GID = '1498865402';
+
 $('#loadBtn').addEventListener('click', () => { loadAndRender(); });
 $('#yearSelect').addEventListener('change', () => {
   if(window.__ROWS) renderAll(window.__ROWS);
 });
+
+async function fetchSheetCSV(sheetId, gid){
+  const url = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv${gid ? '&gid='+gid : ''}`;
+  const res = await fetch(url);
+  if(!res.ok) throw new Error('데이터를 가져올 수 없습니다 (status ' + res.status + '). 시트 공유 설정을 확인해주세요.');
+  const csvText = await res.text();
+  const parsed = Papa.parse(csvText, { header:true, skipEmptyLines:true });
+  if(parsed.errors && parsed.errors.length){
+    console.warn('CSV 파싱 경고:', parsed.errors);
+  }
+  return parsed.data;
+}
+
+function normPoNo(v){
+  if(v==null) return '';
+  return String(v).trim();
+}
 
 async function loadAndRender(){
   const sheetId = $('#sheetId').value.trim();
   const gid = $('#sheetGid').value.trim();
   if(!sheetId){ alert('시트 ID를 입력해주세요.'); return; }
 
-  const url = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv${gid ? '&gid='+gid : ''}`;
-
   try{
-    const res = await fetch(url);
-    if(!res.ok) throw new Error('데이터를 가져올 수 없습니다 (status ' + res.status + '). 시트 공유 설정을 확인해주세요.');
-    const csvText = await res.text();
-    const parsed = Papa.parse(csvText, { header:true, skipEmptyLines:true });
-    if(parsed.errors && parsed.errors.length){
-      console.warn('CSV 파싱 경고:', parsed.errors);
+    const [rows, reasonRows] = await Promise.all([
+      fetchSheetCSV(sheetId, gid),
+      fetchSheetCSV(sheetId, REASON_GID)
+    ]);
+
+    const reasonMap = new Map();
+    for(const r of reasonRows){
+      const po = normPoNo(r['PO번호']);
+      const reason = (r['절감사유']||'').trim();
+      if(po) reasonMap.set(po, reason);
     }
-    const rows = parsed.data;
+
     window.__ROWS = rows;
+    window.__REASON_MAP = reasonMap;
     renderAll(rows);
   }catch(err){
     alert('로드 오류: ' + err.message);
@@ -409,6 +441,7 @@ function buildDetailTable(year, month){
     td.textContent = '해당 월에 절감금액이 있는 상세 데이터가 없습니다.';
     tr.appendChild(td); tbody.appendChild(tr);
   } else {
+    const reasonMap = window.__REASON_MAP || new Map();
     for(const r of filtered){
       const d = parseKoreanDate(pick(r,'PO 생성일'));
       const po = pick(r,'PO번호');
@@ -416,17 +449,34 @@ function buildDetailTable(year, month){
       const line = pick(r,'구매오더내역');
       const amt = parseAmount(pick(r,'절감금액'));
       const rate = normRate(pick(r,'절감율'));
+      const reason = reasonMap.get(normPoNo(po)) || '';
 
       const tr = document.createElement('tr');
+      tr.className = 'po-row';
       tr.innerHTML = `
-        <td>${d? d.toISOString().slice(0,10) : ''}</td>
+        <td><span class="caret">▶</span>${d? d.toISOString().slice(0,10) : ''}</td>
         <td>${po??''}</td>
         <td>${vend??''}</td>
         <td>${line??''}</td>
         <td class="muted">${fmtWon(amt)}</td>
         <td class="muted">${fmtPct(rate)}</td>
       `;
+
+      const reasonTr = document.createElement('tr');
+      reasonTr.className = 'reason-row hidden';
+      const reasonTd = document.createElement('td');
+      reasonTd.colSpan = 6;
+      reasonTd.innerHTML = `<span class="muted">절감사유:</span> ${reason ? reason : '<span class="muted">등록된 절감사유가 없습니다.</span>'}`;
+      reasonTr.appendChild(reasonTd);
+
+      tr.addEventListener('click', ()=>{
+        const isOpen = tr.classList.contains('open');
+        tr.classList.toggle('open', !isOpen);
+        reasonTr.classList.toggle('hidden', isOpen);
+      });
+
       tbody.appendChild(tr);
+      tbody.appendChild(reasonTr);
     }
   }
   table.appendChild(tbody);
