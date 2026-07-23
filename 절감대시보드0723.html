@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>절감 대시보드 · Google Sheets 연동</title>
+  <!-- PapaParse for CSV parsing -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+  <style>
+    :root{
+      --bg:#ffffff;
+      --panel:#ffffff;
+      --ink:#111827;
+      --muted:#6b7280;
+      --accent:#2563eb;
+      --ok:#16a34a;
+      --warn:#d97706;
+      --danger:#dc2626;
+      --border:#e5e7eb;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      background:var(--bg);
+      color:var(--ink);
+      font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,"Noto Sans KR","Apple SD Gothic Neo";
+    }
+    .wrap{
+      max-width:1100px;
+      margin:24px auto;
+      padding:0 16px;
+    }
+    h1{
+      font-size:22px;
+      margin:1cm 0 14px;
+    }
+    .toolbar{
+      display:flex;
+      gap:10px;
+      align-items:center;
+      flex-wrap:wrap;
+      margin-bottom:14px;
+    }
+    .card{
+      background:var(--panel);
+      border:1px solid var(--border);
+      border-radius:14px;
+      padding:14px;
+    }
+    select,input[type="text"],button{
+      background:#ffffff;
+      color:var(--ink);
+      border:1px solid var(--border);
+      padding:8px 10px;
+      border-radius:10px;
+      font-size:13px;
+    }
+    button{cursor:pointer}
+    button[disabled]{opacity:.5;cursor:not-allowed}
+    .kpis{
+      display:grid;
+      grid-template-columns:1fr;
+      gap:10px;
+      margin-top:8px;
+    }
+    .kpi{
+      background:#ffffff;
+      border:1px dashed var(--border);
+      border-radius:12px;
+      padding:12px;
+    }
+    .kpi .t{font-size:12px;color:var(--muted)}
+    .kpi .v{font-size:20px;margin-top:6px}
+    table{
+      width:100%;
+      border-collapse:separate;
+      border-spacing:0 8px;
+    }
+    thead th{
+      font-size:12px;
+      text-align:left;
+      color:var(--muted);
+      padding:0 10px;
+    }
+    tbody td{
+      background:#ffffff;
+      border:1px solid var(--border);
+      padding:10px;
+      border-left:none;
+      border-right:none;
+    }
+    tr.month-row{cursor:pointer}
+    tr.month-row:hover td{background:#f9fafb}
+    tr.month-row td:first-child, tr.detail-row td:first-child{border-left:1px solid var(--border);border-radius:10px 0 0 10px}
+    tr.month-row td:last-child, tr.detail-row td:last-child{border-right:1px solid var(--border);border-radius:0 10px 10px 0}
+    tr.detail-row td{
+      background:#fafafa;
+      border-top:none;
+      padding:0 10px 10px 10px;
+    }
+    tr.detail-row.hidden{display:none}
+    .caret{
+      display:inline-block;
+      transition:transform .15s ease;
+      margin-right:6px;
+      color:var(--muted);
+    }
+    tr.month-row.open .caret{transform:rotate(90deg)}
+    .pill{
+      display:inline-block;
+      padding:2px 8px;
+      border-radius:999px;
+      border:1px solid var(--border);
+      font-size:12px;
+      color:var(--muted);
+      background:#ffffff;
+    }
+    .muted{color:var(--muted)}
+    .mon{width:64px;display:inline-block}
+    .legend{font-size:12px;color:var(--muted)}
+    .footer{
+      margin-top:18px;
+      color:var(--muted);
+      font-size:12px;
+    }
+    .detail-inner-table{
+      width:100%;
+      border-collapse:separate;
+      border-spacing:0 6px;
+    }
+    .detail-inner-table thead th{
+      font-size:11px;
+      color:var(--muted);
+      text-align:left;
+      padding:0 8px;
+    }
+    .detail-inner-table tbody td{
+      background:#ffffff;
+      border:1px solid var(--border);
+      padding:8px;
+      font-size:13px;
+    }
+    .note{font-size:12px;color:var(--muted);margin-top:6px}
+    .badge{
+      border:1px solid var(--border);
+      padding:2px 6px;
+      border-radius:8px;
+      margin-left:6px;
+      font-size:11px;
+      color:var(--muted);
+      background:#ffffff;
+    }
+    .field-label{font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:4px}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>절감 대시보드 <span class="badge">Google Sheets · PO 시트</span></h1>
+
+    <div class="toolbar card">
+      <label class="field-label">연도 선택
+        <select id="yearSelect"></select>
+      </label>
+      <label class="field-label">Google Sheet ID
+        <input type="text" id="sheetId" style="width:340px" />
+      </label>
+      <label class="field-label">시트 GID
+        <input type="text" id="sheetGid" style="width:120px" />
+      </label>
+      <button id="loadBtn">데이터 불러오기</button>
+      <span class="legend">※ 시트가 "링크가 있는 모든 사용자에게 공개(뷰어)"로 설정되어 있어야 불러올 수 있습니다.</span>
+    </div>
+
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <strong id="tableTitle">월별 절감 현황</strong>
+        <span class="legend">월을 클릭하면 아래에 상세 내역이 펼쳐집니다</span>
+      </div>
+
+      <div class="kpis">
+        <div class="kpi">
+          <div class="t" id="kpiYearLabel">총 절감금액</div>
+          <div class="v" id="kpiThisAmt">-</div>
+          <div class="t">절감율 <span id="kpiThisRate" class="pill">-</span></div>
+        </div>
+      </div>
+
+      <table id="monthTable" style="margin-top:12px">
+        <thead>
+          <tr>
+            <th>월</th>
+            <th>절감금액</th>
+            <th>절감율</th>
+            <th>비고</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <div class="note">※ (예상)은 해당 월 데이터가 없어 보유 월 평균으로 보간한 값입니다.</div>
+    </div>
+
+    <div class="footer">
+      ⚙️ 열 이름 매핑(PO 시트): <code>PO 생성일</code>, <code>PO번호</code>, <code>구매처명</code>, <code>구매오더내역</code>, <code>절감금액</code>, <code>절감율</code>. 헤더는 1행에 위치해야 합니다.
+    </div>
+  </div>
+
+<script>
+const $ = (sel)=>document.querySelector(sel);
+const fmtWon = (n)=> isFinite(n) ? new Intl.NumberFormat('ko-KR').format(Math.round(n)) + '원' : '-';
+const fmtPct = (x)=> (x==null||!isFinite(x))? '-' : ( (x*100).toFixed(1).replace(/\.0$/,'') + '%');
+const clampYear = (y)=> Math.min(2030, Math.max(2021, y));
+
+// 연도 선택 초기화
+(function initYear(){
+  const ySel = $('#yearSelect');
+  for(let y=2021;y<=2030;y++){
+    const opt = document.createElement('option');
+    opt.value = y; opt.textContent = y + '년';
+    if(y===new Date().getFullYear()) opt.selected = true;
+    ySel.appendChild(opt);
+  }
+})();
+
+// 기본값: 사용자가 공유한 구글 시트
+$('#sheetId').value = '1SYxMT6gHs3otmwop9jkqzJNxpPrbO9Gz1QtZvnG2yss';
+$('#sheetGid').value = '803604323';
+
+$('#loadBtn').addEventListener('click', () => { loadAndRender(); });
+$('#yearSelect').addEventListener('change', () => {
+  if(window.__ROWS) renderAll(window.__ROWS);
+});
+
+async function loadAndRender(){
+  const sheetId = $('#sheetId').value.trim();
+  const gid = $('#sheetGid').value.trim();
+  if(!sheetId){ alert('Google Sheet ID를 입력해주세요.'); return; }
+
+  const url = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv${gid ? '&gid='+gid : ''}`;
+
+  try{
+    const res = await fetch(url);
+    if(!res.ok) throw new Error('구글 시트를 가져올 수 없습니다 (status ' + res.status + '). 시트 공유 설정을 확인해주세요.');
+    const csvText = await res.text();
+    const parsed = Papa.parse(csvText, { header:true, skipEmptyLines:true });
+    if(parsed.errors && parsed.errors.length){
+      console.warn('CSV 파싱 경고:', parsed.errors);
+    }
+    const rows = parsed.data;
+    window.__ROWS = rows;
+    renderAll(rows);
+  }catch(err){
+    alert('로드 오류: ' + err.message);
+    console.error(err);
+  }
+}
+
+function normRate(v){
+  if(v==null || v==='') return null;
+  if(typeof v === 'string'){
+    const s = v.replace(/\s+/g,'').replace('%','');
+    const num = parseFloat(s);
+    if(!isFinite(num)) return null;
+    return num > 1 ? (num/100) : num;
+  }
+  if(typeof v === 'number'){
+    return v > 1 ? v/100 : v;
+  }
+  return null;
+}
+
+// "2026.07.14" 또는 "2026-07-14" 형식의 날짜 문자열을 파싱
+function parseKoreanDate(v){
+  if(v==null || v==='') return null;
+  if(v instanceof Date) return isNaN(v) ? null : v;
+  const s = String(v).trim();
+  let m = s.match(/^(\d{4})[.\-\/](\d{1,2})[.\-\/](\d{1,2})/);
+  if(m){
+    const y = parseInt(m[1],10), mo = parseInt(m[2],10), d = parseInt(m[3],10);
+    const dt = new Date(Date.UTC(y, mo-1, d));
+    return isNaN(dt) ? null : dt;
+  }
+  const d = new Date(s);
+  return isNaN(d) ? null : d;
+}
+
+function parseAmount(v){
+  if(v==null || v==='') return 0;
+  if(typeof v === 'number') return v;
+  const cleaned = String(v).replace(/[^\d.\-]/g,'');
+  const n = Number(cleaned);
+  return isFinite(n) ? n : 0;
+}
+
+function monthKey(y,m){ return `${y}-${String(m).padStart(2,'0')}` }
+
+function aggregate(rows, targetYear){
+  const byM = new Map();
+  const pick = (r, k)=> r[k];
+
+  for(const r of rows){
+    const d = parseKoreanDate(pick(r, 'PO 생성일'));
+    if(!d) continue;
+    const y = d.getUTCFullYear();
+    if(y !== targetYear) continue;
+    const m = d.getUTCMonth()+1;
+
+    const amt = parseAmount(pick(r, '절감금액'));
+    const rate = normRate(pick(r, '절감율'));
+    const base = (rate && rate>0) ? (amt / rate) : null;
+
+    const key = monthKey(y,m);
+    if(!byM.has(key)) byM.set(key, {y,m, amt:0, base:0, rows:[]});
+    const b = byM.get(key);
+    b.amt += amt;
+    if(base!=null && isFinite(base)) b.base += base;
+    b.rows.push(r);
+  }
+
+  const arr = Array.from({length:12}, (_,i)=>({y:targetYear,m:i+1, amt:null, base:null, rows:[]}));
+  for(const [k, obj] of byM.entries()){
+    const rate = (obj.base>0)? (obj.amt/obj.base) : null;
+    arr[obj.m-1] = { y:obj.y, m:obj.m, amt:obj.amt, base:obj.base>0?obj.base:null, rate, rows:obj.rows };
+  }
+
+  const known = arr.filter(x=>x.amt!=null && x.base!=null);
+  const meanAmt = known.length? known.reduce((a,c)=>a+c.amt,0)/known.length : null;
+  const meanRate = known.length? known.reduce((a,c)=>a+(c.rate??0),0)/known.length : null;
+  const meanBase = (meanAmt!=null && meanRate!=null && meanRate>0)? (meanAmt/meanRate) : null;
+
+  return arr.map(x=>{
+    if(x.amt==null){
+      return { ...x, amt: meanAmt??0, base: meanBase??0, rate: meanRate??null, rows: [], forecast:true };
+    }
+    return { ...x, forecast:false };
+  });
+}
+
+function totals(arr){
+  const sumAmt = arr.reduce((a,c)=>a + (c.amt||0), 0);
+  const sumBase = arr.reduce((a,c)=>a + (c.base||0), 0);
+  const rate = sumBase>0 ? (sumAmt/sumBase) : null;
+  return { sumAmt, sumBase, rate };
+}
+
+function renderAll(rows){
+  const year = clampYear(parseInt($('#yearSelect').value,10));
+  const monthly = aggregate(rows, year);
+  const t1 = totals(monthly);
+
+  $('#tableTitle').textContent = `${year}년 월별 절감 현황`;
+  $('#kpiYearLabel').textContent = `${year}년 총 절감금액`;
+  $('#kpiThisAmt').textContent = fmtWon(t1.sumAmt);
+  $('#kpiThisRate').textContent = fmtPct(t1.rate);
+
+  const tbody = $('#monthTable tbody');
+  tbody.innerHTML = '';
+
+  for(let i=0;i<12;i++){
+    const a = monthly[i];
+
+    const tr = document.createElement('tr');
+    tr.className = 'month-row';
+    tr.dataset.y = a.y; tr.dataset.m = a.m;
+    tr.innerHTML = `
+      <td><span class="caret">▶</span><span class="mon">${a.m}월</span></td>
+      <td>${fmtWon(a.amt)} ${a.forecast?'<span class="pill">예상</span>':''}</td>
+      <td>${fmtPct(a.rate)}</td>
+      <td class="muted">클릭하여 상세 보기</td>
+    `;
+
+    const detailTr = document.createElement('tr');
+    detailTr.className = 'detail-row hidden';
+    const detailTd = document.createElement('td');
+    detailTd.colSpan = 4;
+    detailTd.appendChild(buildDetailTable(a.y, a.m));
+    detailTr.appendChild(detailTd);
+
+    tr.addEventListener('click', ()=>{
+      const isOpen = tr.classList.contains('open');
+      // 다른 열려있는 행은 그대로 두고, 클릭한 행만 토글 (여러 개 동시 확인 가능)
+      tr.classList.toggle('open', !isOpen);
+      detailTr.classList.toggle('hidden', isOpen);
+    });
+
+    tbody.appendChild(tr);
+    tbody.appendChild(detailTr);
+  }
+}
+
+function buildDetailTable(year, month){
+  const rows = (window.__ROWS||[]);
+  const pick = (r, k)=> r[k];
+  const filtered = rows.filter(r=>{
+    const d = parseKoreanDate(pick(r,'PO 생성일'));
+    if(!(d && d.getUTCFullYear()===year && (d.getUTCMonth()+1)===month)) return false;
+    const amt = parseAmount(pick(r,'절감금액'));
+    return amt > 0;
+  });
+
+  const table = document.createElement('table');
+  table.className = 'detail-inner-table';
+  const thead = document.createElement('thead');
+  thead.innerHTML = `
+    <tr>
+      <th>PO 생성일</th>
+      <th>PO번호</th>
+      <th>구매처명</th>
+      <th>구매오더내역</th>
+      <th class="muted">절감금액</th>
+      <th class="muted">절감율</th>
+    </tr>`;
+  table.appendChild(thead);
+
+  const tbody = document.createElement('tbody');
+  if(!filtered.length){
+    const tr = document.createElement('tr');
+    const td = document.createElement('td');
+    td.colSpan = 6; td.className='muted';
+    td.textContent = '해당 월에 절감금액이 있는 상세 데이터가 없습니다.';
+    tr.appendChild(td); tbody.appendChild(tr);
+  } else {
+    for(const r of filtered){
+      const d = parseKoreanDate(pick(r,'PO 생성일'));
+      const po = pick(r,'PO번호');
+      const vend = pick(r,'구매처명');
+      const line = pick(r,'구매오더내역');
+      const amt = parseAmount(pick(r,'절감금액'));
+      const rate = normRate(pick(r,'절감율'));
+
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${d? d.toISOString().slice(0,10) : ''}</td>
+        <td>${po??''}</td>
+        <td>${vend??''}</td>
+        <td>${line??''}</td>
+        <td class="muted">${fmtWon(amt)}</td>
+        <td class="muted">${fmtPct(rate)}</td>
+      `;
+      tbody.appendChild(tr);
+    }
+  }
+  table.appendChild(tbody);
+  return table;
+}
+
+// 페이지 로드시 자동으로 데이터 불러오기
+loadAndRender();
+</script>
+</body>
+</html>
