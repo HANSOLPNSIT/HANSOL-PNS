@@ -196,7 +196,7 @@
         </thead>
         <tbody></tbody>
       </table>
-      <div class="note">※ (예상)은 해당 월 데이터가 없어 보유 월 평균으로 보간한 값입니다.</div>
+      <div class="note">※ 데이터가 없는 월은 '-'로 표시됩니다.</div>
     </div>
 
     <div class="footer">
@@ -206,7 +206,7 @@
 
 <script>
 const $ = (sel)=>document.querySelector(sel);
-const fmtWon = (n)=> isFinite(n) ? new Intl.NumberFormat('ko-KR').format(Math.round(n)) + '원' : '-';
+const fmtWon = (n)=> (n!=null && isFinite(n)) ? new Intl.NumberFormat('ko-KR').format(Math.round(n)) + '원' : '-';
 const fmtPct = (x)=> (x==null||!isFinite(x))? '-' : ( (x*100).toFixed(1).replace(/\.0$/,'') + '%');
 const clampYear = (y)=> Math.min(2030, Math.max(2021, y));
 
@@ -316,23 +316,13 @@ function aggregate(rows, targetYear){
     b.rows.push(r);
   }
 
-  const arr = Array.from({length:12}, (_,i)=>({y:targetYear,m:i+1, amt:null, base:null, rows:[]}));
+  const arr = Array.from({length:12}, (_,i)=>({y:targetYear,m:i+1, amt:null, base:null, rate:null, rows:[]}));
   for(const [k, obj] of byM.entries()){
     const rate = (obj.base>0)? (obj.amt/obj.base) : null;
     arr[obj.m-1] = { y:obj.y, m:obj.m, amt:obj.amt, base:obj.base>0?obj.base:null, rate, rows:obj.rows };
   }
 
-  const known = arr.filter(x=>x.amt!=null && x.base!=null);
-  const meanAmt = known.length? known.reduce((a,c)=>a+c.amt,0)/known.length : null;
-  const meanRate = known.length? known.reduce((a,c)=>a+(c.rate??0),0)/known.length : null;
-  const meanBase = (meanAmt!=null && meanRate!=null && meanRate>0)? (meanAmt/meanRate) : null;
-
-  return arr.map(x=>{
-    if(x.amt==null){
-      return { ...x, amt: meanAmt??0, base: meanBase??0, rate: meanRate??null, rows: [], forecast:true };
-    }
-    return { ...x, forecast:false };
-  });
+  return arr;
 }
 
 function totals(arr){
@@ -363,7 +353,7 @@ function renderAll(rows){
     tr.dataset.y = a.y; tr.dataset.m = a.m;
     tr.innerHTML = `
       <td><span class="caret">▶</span><span class="mon">${a.m}월</span></td>
-      <td>${fmtWon(a.amt)} ${a.forecast?'<span class="pill">예상</span>':''}</td>
+      <td>${fmtWon(a.amt)}</td>
       <td>${fmtPct(a.rate)}</td>
       <td class="muted">클릭하여 상세 보기</td>
     `;
