@@ -142,7 +142,7 @@
     padding:6px 8px;
     text-align:right;
   }
-  .stat-table th{background:#efefeb;text-align:center;font-weight:700;color:var(--ink-soft);font-size:11px;}
+  .stat-table th{background:#efefeb;text-align:center;font-weight:700;color:var(--ink-soft);font-size:11px;position:sticky;top:0;z-index:5;}
   .stat-table td:first-child, .stat-table th:first-child{text-align:left;}
   .stat-table tr:hover td{background:#f7f7f5;}
 
@@ -257,6 +257,16 @@
     </div>
   </div>
 
+  <div class="panel">
+    <div class="panel-head">
+      현재 조회 조건의 원본 데이터
+      <span class="count-badge" id="detailCountBadge"></span>
+    </div>
+    <div class="panel-body" style="overflow:auto; max-height:520px;">
+      <table class="stat-table" id="detailTable" style="white-space:nowrap;"></table>
+    </div>
+  </div>
+
   </div><!-- /mainPanels -->
 
 </div>
@@ -271,6 +281,17 @@ const SOURCE_ALIASES = {
   '서비스등급': ['서비스등급내역','서비스 등급내역'],
   '서비스단가': ['서비스단가'],
   '구매처명': ['구매처명']
+};
+// 상세 데이터 표에 추가로 표시할 참고용 컬럼 (없어도 에러 없이 넘어감)
+const DETAIL_ALIASES = {
+  'PO생성일': ['PO생성일'],
+  'PO번호': ['PO번호'],
+  '프로젝트코드': ['프로젝트코드'],
+  '프로젝트명': ['프로젝트명'],
+  '상주여부': ['상주여부'],
+  '서비스단위': ['서비스단위'],
+  '서비스수량': ['서비스수량'],
+  '비고': ['비고'],
 };
 
 let RAW = [];
@@ -456,6 +477,45 @@ const vendorListMajorTitle = document.getElementById('vendorListMajorTitle');
 const vendorListMajorEl = document.getElementById('vendorListMajor');
 const vendorListMajorMidTitle = document.getElementById('vendorListMajorMidTitle');
 const vendorListMajorMidEl = document.getElementById('vendorListMajorMid');
+const detailTable = document.getElementById('detailTable');
+const detailCountBadge = document.getElementById('detailCountBadge');
+
+const DETAIL_COLS = [
+  {key:'PO생성일', label:'PO생성일'},
+  {key:'PO번호', label:'PO번호'},
+  {key:'프로젝트코드', label:'프로젝트코드'},
+  {key:'프로젝트명', label:'프로젝트명'},
+  {key:'대분류', label:'기술분류'},
+  {key:'중분류', label:'기술세부'},
+  {key:'상주여부', label:'상주여부'},
+  {key:'서비스단가', label:'서비스단가'},
+  {key:'서비스단위', label:'서비스단위'},
+  {key:'서비스등급', label:'서비스등급내역'},
+  {key:'서비스수량', label:'서비스수량'},
+  {key:'비고', label:'비고'},
+  {key:'구매처명', label:'구매처명'},
+];
+const DETAIL_ROW_CAP = 500;
+
+function renderDetailTable(rows){
+  detailCountBadge.textContent = rows.length ? `${rows.length}건${rows.length>DETAIL_ROW_CAP ? ` 중 상위 ${DETAIL_ROW_CAP}건 표시` : ''}` : '';
+  if(rows.length===0){
+    detailTable.innerHTML = `<tr><th style="text-align:center;">데이터 없음</th></tr>`;
+    return;
+  }
+  const shown = rows.slice(0, DETAIL_ROW_CAP);
+  const thead = '<tr>' + DETAIL_COLS.map(c=>`<th>${c.label}</th>`).join('') + '</tr>';
+  const tbody = shown.map(r=>'<tr>' + DETAIL_COLS.map(c=>{
+    const isNum = (c.key==='서비스단가' || c.key==='서비스수량');
+    const cls = isNum ? 'mono' : '';
+    let v = r[c.key];
+    let display;
+    if(c.key==='서비스단가') display = fmt(v);
+    else display = (v===null||v===undefined||v==='') ? '-' : v;
+    return `<td class="${cls}" style="text-align:${isNum?'right':'left'};">${display}</td>`;
+  }).join('') + '</tr>').join('');
+  detailTable.innerHTML = thead + tbody;
+}
 
 function renderVendorLists(){
   const byMajor = RAW.filter(d => state.major==='전체' || d['대분류']===state.major);
@@ -486,6 +546,7 @@ function render(){
     chartHost.innerHTML = '<div class="empty">선택한 조건에 해당하는 데이터가 없습니다.</div>';
     statTable.innerHTML = '';
     renderVendorLists();
+    renderDetailTable([]);
     return;
   }
 
@@ -622,6 +683,7 @@ function render(){
   });
 
   renderVendorLists();
+  renderDetailTable(filtered);
 
   // ---- 통계 테이블 ----
   let thead = `<tr><th>서비스등급</th><th>건수</th><th>최소</th><th>Q1</th><th>중앙값</th><th>Q3</th><th>최대</th><th>평균</th></tr>`;
@@ -678,7 +740,7 @@ async function loadData(){
     const res = await fetch(DATA_FILE);
     if(!res.ok) throw new Error('HTTP ' + res.status);
     const buf = await res.arrayBuffer();
-    const wb = XLSX.read(buf, {type:'array'});
+    const wb = XLSX.read(buf, {type:'array', cellDates:true});
     const sheetName = wb.SheetNames.includes(SHEET_NAME) ? SHEET_NAME : wb.SheetNames[0];
     const ws = wb.Sheets[sheetName];
     const rowsRaw = XLSX.utils.sheet_to_json(ws, {defval:null});
@@ -706,17 +768,40 @@ async function loadData(){
       );
     }
 
+    // 상세 표용 참고 컬럼 매핑 (선택 사항, 없으면 그냥 빈 값으로 표시)
+    const detailMapping = {};
+    Object.keys(DETAIL_ALIASES).forEach(canon=>{
+      const candidates = DETAIL_ALIASES[canon];
+      let found = null;
+      for(const cand of candidates){
+        found = actualHeaders.find(h => normKey(h) === normKey(cand));
+        if(found) break;
+      }
+      detailMapping[canon] = found;
+    });
+
     const clean = v => (v===null || v===undefined || String(v).trim()==='') ? '미분류' : String(v).trim();
+    const fmtDetailVal = v => {
+      if(v===null || v===undefined || String(v).trim()==='') return '';
+      if(v instanceof Date) return v.toLocaleDateString('ko-KR');
+      return String(v).trim();
+    };
 
     RAW = rowsRaw
       .filter(r => typeof r[mapping['서비스단가']] === 'number')
-      .map(r => ({
-        '대분류': clean(r[mapping['대분류']]),
-        '중분류': clean(r[mapping['중분류']]),
-        '서비스등급': clean(r[mapping['서비스등급']]),
-        '서비스단가': r[mapping['서비스단가']],
-        '구매처명': clean(r[mapping['구매처명']]),
-      }));
+      .map(r => {
+        const row = {
+          '대분류': clean(r[mapping['대분류']]),
+          '중분류': clean(r[mapping['중분류']]),
+          '서비스등급': clean(r[mapping['서비스등급']]),
+          '서비스단가': r[mapping['서비스단가']],
+          '구매처명': clean(r[mapping['구매처명']]),
+        };
+        Object.keys(DETAIL_ALIASES).forEach(canon=>{
+          row[canon] = detailMapping[canon] ? fmtDetailVal(r[detailMapping[canon]]) : '';
+        });
+        return row;
+      });
 
     if(RAW.length === 0) throw new Error('서비스단가가 숫자인 유효한 데이터 행을 찾지 못했습니다.');
 
