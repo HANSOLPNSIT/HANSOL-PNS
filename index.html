@@ -24,7 +24,30 @@
     .main{position:relative}
     .viewer{position:absolute; inset:0; border:0; width:100%; height:100%; background:#ffffff}
     .note{font-size:11px; color:var(--muted); margin-top:8px; flex-shrink:0}
-    @media (max-width:900px){ .layout{grid-template-columns:1fr} .sidebar{position:sticky; top:0; z-index:2} }
+
+    /* ===== 모바일 레이아웃 수정 =====
+       기존 grid(2열 -> 1열)에서는 사이드바가 height:100vh로 고정되어
+       본문(.main) 행이 실질적으로 0px 높이가 되어 iframe이 화면에 보이지 않는 문제가 있었음.
+       모바일에서는 세로 flex로 바꾸고 본문에 flex:1 + 명시적 높이를 줘서 항상 보이도록 수정. */
+    @media (max-width:900px){
+      .layout{
+        display:flex;
+        flex-direction:column;
+        grid-template-columns:none;
+        min-height:100vh;
+      }
+      .sidebar{
+        position:relative;
+        top:auto;
+        height:auto;
+        max-height:45vh;
+        flex-shrink:0;
+      }
+      .main{
+        flex:1 1 auto;
+        min-height:55vh;
+      }
+    }
   </style>
 </head>
 <body>
