@@ -182,7 +182,7 @@
         const a = document.createElement('a');
         a.href = "#"+encodeURIComponent(p.name);
         a.dataset.path = p.name;
-        a.innerHTML = `<span>${p.title}</span><span class="tag">${p.name}</span>`;
+        a.innerHTML = `<span>${p.title}</span>`;
         a.addEventListener('click', (e) => {
           e.preventDefault();
           openPage(p.name, p.title);
