@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>자재코드 조회</title>
+<style>
+  :root{
+    --border:#dcdcdc;
+    --bg:#fafafa;
+    --accent:#333;
+    --highlight:#f0f0f0;
+  }
+  *{box-sizing:border-box;}
+  body{
+    font-family:"Malgun Gothic","Apple SD Gothic Neo",sans-serif;
+    margin:0; padding:20px; background:#fff; color:#222;
+    font-size:14px;
+  }
+  h1{font-size:18px; margin:0 0 4px;}
+  .sub{color:#777; font-size:12px; margin-bottom:16px;}
+  #searchBox{
+    width:100%; padding:10px 12px; font-size:15px;
+    border:1px solid #999; border-radius:4px; margin-bottom:8px;
+  }
+  #status{font-size:12px; color:#777; margin-bottom:14px; min-height:16px;}
+
+  #exactMatchBox{
+    display:none;
+    border:1px solid var(--accent);
+    background:var(--bg);
+    border-radius:6px;
+    padding:12px 14px;
+    margin-bottom:16px;
+  }
+  #exactMatchBox h2{font-size:14px; margin:0 0 8px;}
+  #exactMatchBox table{width:100%; border-collapse:collapse; font-size:13px;}
+  #exactMatchBox th, #exactMatchBox td{
+    border:1px solid var(--border); padding:6px 8px; text-align:left;
+  }
+  #exactMatchBox th{background:#eee;}
+
+  #resultWrap{
+    overflow:auto; max-height:70vh;
+    border:1px solid var(--border); border-radius:4px;
+  }
+  table.data{border-collapse:collapse; width:100%; font-size:12px; white-space:nowrap;}
+  table.data th, table.data td{
+    border:1px solid var(--border); padding:5px 8px; text-align:left;
+  }
+  table.data th{background:#f2f2f2; position:sticky; top:0; z-index:1;}
+  table.data tr:hover td{background:var(--highlight);}
+  mark{background:#fff2a8; padding:0;}
+  .empty{padding:20px; text-align:center; color:#999;}
+</style>
+</head>
+<body>
+
+<h1>자재코드 / PO 조회</h1>
+<div class="sub">자재코드, 품명, PO번호 등 아무 값이나 입력하면 실시간으로 검색됩니다.</div>
+
+<input type="text" id="searchBox" placeholder="검색어 입력...">
+<div id="status">데이터 불러오는 중...</div>
+
+<div id="exactMatchBox">
+  <h2 id="exactMatchTitle"></h2>
+  <table>
+    <thead><tr><th>PO일자</th><th>PO번호</th><th>PO단가</th></tr></thead>
+    <tbody id="exactMatchBody"></tbody>
+  </table>
+</div>
+
+<div id="resultWrap">
+  <table class="data" id="resultTable"></table>
+</div>
+
+<script>
+/* ===================== 설정 ===================== */
+// 구글 시트 CSV 내보내기 URL (gid는 데이터가 있는 탭의 gid로 지정)
+const SHEET_ID = '1SYxMT6gHs3otmwop9jkqzJNxpPrbO9Gz1QtZvnG2yss';
+const SHEET_GID = '1782715841'; // 자재/PO 데이터가 있는 탭의 gid
+const CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${SHEET_GID}`;
+
+// 열 이름 (헤더 텍스트와 정확히 일치해야 함)
+const COL_MATERIAL_CODE = '자재코드';
+const COL_PO_DATE = 'PO일자';
+const COL_PO_NUMBER = 'PO번호';
+const COL_PO_PRICE = 'PO단가';
+
+const MAX_RESULTS = 200; // 화면에 표시할 최대 행 수
+/* ================================================== */
+
+let headers = [];
+let rows = [];
+
+async function loadData() {
+  try {
+    const res = await fetch(CSV_URL);
+    if (!res.ok) throw new Error('시트를 불러올 수 없습니다 (공유 설정 확인 필요)');
+    const text = await res.text();
+    const parsed = parseCSV(text);
+    headers = parsed[0];
+    rows = parsed.slice(1).filter(r => r.some(c => c && c.trim() !== ''));
+    document.getElementById('status').textContent = `총 ${rows.length.toLocaleString()}건 불러옴 · 검색어를 입력하세요`;
+  } catch (err) {
+    document.getElementById('status').textContent = '오류: ' + err.message;
+  }
+}
+
+// 간단한 CSV 파서 (따옴표 안의 콤마/줄바꿈 처리)
+function parseCSV(text) {
+  const rows = [];
+  let row = [], field = '', inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i], next = text[i+1];
+    if (inQuotes) {
+      if (c === '"' && next === '"') { field += '"'; i++; }
+      else if (c === '"') { inQuotes = false; }
+      else { field += c; }
+    } else {
+      if (c === '"') inQuotes = true;
+      else if (c === ',') { row.push(field); field = ''; }
+      else if (c === '\r') { /* skip */ }
+      else if (c === '\n') { row.push(field); rows.push(row); row = []; field = ''; }
+      else field += c;
+    }
+  }
+  if (field.length > 0 || row.length > 0) { row.push(field); rows.push(row); }
+  return rows;
+}
+
+function colIndex(name) {
+  return headers.indexOf(name);
+}
+
+function highlight(text, query) {
+  if (!query) return escapeHtml(text);
+  const idx = text.toLowerCase().indexOf(query.toLowerCase());
+  if (idx === -1) return escapeHtml(text);
+  return escapeHtml(text.slice(0, idx)) + '<mark>' + escapeHtml(text.slice(idx, idx + query.length)) + '</mark>' + escapeHtml(text.slice(idx + query.length));
+}
+
+function escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+}
+
+let debounceTimer;
+document.getElementById('searchBox').addEventListener('input', () => {
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(runSearch, 150);
+});
+
+function runSearch() {
+  const q = document.getElementById('searchBox').value.trim();
+  const exactBox = document.getElementById('exactMatchBox');
+  const table = document.getElementById('resultTable');
+  const status = document.getElementById('status');
+
+  if (!q) {
+    exactBox.style.display = 'none';
+    table.innerHTML = '';
+    status.textContent = `총 ${rows.length.toLocaleString()}건 · 검색어를 입력하세요`;
+    return;
+  }
+
+  const codeIdx = colIndex(COL_MATERIAL_CODE);
+
+  // ① 자재코드 정확일치 -> 요약 박스
+  if (codeIdx !== -1) {
+    const exactRows = rows.filter(r => (r[codeIdx] || '').trim() === q);
+    if (exactRows.length > 0) {
+      const dateIdx = colIndex(COL_PO_DATE);
+      const numIdx = colIndex(COL_PO_NUMBER);
+      const priceIdx = colIndex(COL_PO_PRICE);
+      document.getElementById('exactMatchTitle').textContent =
+        `자재코드 "${q}" — PO 이력 ${exactRows.length}건`;
+      document.getElementById('exactMatchBody').innerHTML = exactRows.map(r => `
+        <tr>
+          <td>${escapeHtml(r[dateIdx])}</td>
+          <td>${escapeHtml(r[numIdx])}</td>
+          <td>${escapeHtml(r[priceIdx])}</td>
+        </tr>
+      `).join('');
+      exactBox.style.display = 'block';
+    } else {
+      exactBox.style.display = 'none';
+    }
+  }
+
+  // ② 전체 통합 검색 -> 테이블
+  const ql = q.toLowerCase();
+  const matches = rows.filter(r => r.some(c => (c || '').toLowerCase().includes(ql)));
+  status.textContent = `${matches.length.toLocaleString()}건 검색됨` + (matches.length > MAX_RESULTS ? ` (상위 ${MAX_RESULTS}건 표시)` : '');
+
+  if (matches.length === 0) {
+    table.innerHTML = '<tr><td class="empty">일치하는 결과가 없습니다</td></tr>';
+    return;
+  }
+
+  const shown = matches.slice(0, MAX_RESULTS);
+  let html = '<thead><tr>' + headers.map(h => `<th>${escapeHtml(h)}</th>`).join('') + '</tr></thead><tbody>';
+  shown.forEach(r => {
+    html += '<tr>' + r.map(c => `<td>${highlight(c || '', q)}</td>`).join('') + '</tr>';
+  });
+  html += '</tbody>';
+  table.innerHTML = html;
+}
+
+loadData();
+</script>
+</body>
+</html>
