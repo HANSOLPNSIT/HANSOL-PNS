@@ -110,6 +110,15 @@
   .vendor-list div{padding:6px 9px;font-size:12px;cursor:pointer;}
   .vendor-list div:hover{background:var(--grid);}
   .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px;}
+  .vendor-pill{
+    display:inline-block;
+    background:#efefeb;
+    border:1px solid var(--line-strong);
+    color:var(--ink);
+    font-size:11px;
+    padding:3px 10px;
+    border-radius:11px;
+  }
   .chip{
     display:flex;align-items:center;gap:6px;
     background:var(--chip);color:#fff;
@@ -234,6 +243,20 @@
     </div>
   </div>
 
+  <div class="panel">
+    <div class="panel-head">현재 조회 조건의 구매처 (실시간)</div>
+    <div class="panel-body">
+      <div style="margin-bottom:16px;">
+        <div style="font-size:11.5px;font-weight:700;color:var(--ink-soft);margin-bottom:7px;" id="vendorListMajorTitle"></div>
+        <div class="chips" id="vendorListMajor" style="gap:5px;"></div>
+      </div>
+      <div>
+        <div style="font-size:11.5px;font-weight:700;color:var(--ink-soft);margin-bottom:7px;" id="vendorListMajorMidTitle"></div>
+        <div class="chips" id="vendorListMajorMid" style="gap:5px;"></div>
+      </div>
+    </div>
+  </div>
+
   </div><!-- /mainPanels -->
 
 </div>
@@ -263,7 +286,16 @@ function gradeSort(a,b){
 
 let majors, midByMajor, allGrades, allVendors, state;
 
-const VENDOR_MARKERS = ['◆','■','▲','●','◇','□','△','○'];
+const PASTEL = [
+  {fill:'#FADBD8', stroke:'#E6989F'}, // 파스텔 레드
+  {fill:'#AED6F1', stroke:'#5DADE2'}, // 파스텔 블루
+  {fill:'#A9DFBF', stroke:'#52BE80'}, // 파스텔 그린
+  {fill:'#F9E79F', stroke:'#D4AC0D'}, // 파스텔 옐로우
+  {fill:'#D7BDE2', stroke:'#AF7AC5'}, // 파스텔 퍼플
+  {fill:'#F8C471', stroke:'#CA6F1E'}, // 파스텔 오렌지
+  {fill:'#A3E4D7', stroke:'#17A589'}, // 파스텔 틸
+  {fill:'#F5CBA7', stroke:'#CA6F1E'}, // 파스텔 피치
+];
 
 // ---------- UI: 대분류/중분류 ----------
 const selMajor = document.getElementById('selMajor');
@@ -337,7 +369,7 @@ function removeVendor(v){
 }
 function renderChips(){
   chipsEl.innerHTML = state.vendors.map((v,i)=>
-    `<span class="chip"><span class="mk">${VENDOR_MARKERS[i%VENDOR_MARKERS.length]}</span>${v}<button data-v="${v}">×</button></span>`
+    `<span class="chip"><span class="mk" style="background:${PASTEL[i%PASTEL.length].fill};border:1.5px solid ${PASTEL[i%PASTEL.length].stroke};border-radius:50%;"></span>${v}<button data-v="${v}">×</button></span>`
   ).join('');
   chipsEl.querySelectorAll('button').forEach(b=>{
     b.addEventListener('click', ()=>removeVendor(b.dataset.v));
@@ -374,15 +406,28 @@ function fmt(n){
 
 // ---------- 툴팁 ----------
 const bpTooltip = document.getElementById('bpTooltip');
-function showTooltip(s){
+function showTooltip(s, vStats){
+  let vendorHtml = '';
+  if(vStats && vStats.length){
+    vendorHtml = vStats.map(v=>`
+      <div style="margin-top:7px;padding-top:7px;border-top:1px solid #444;">
+        <div style="font-weight:700;display:flex;align-items:center;gap:6px;">
+          <span style="width:9px;height:9px;border-radius:50%;background:${v.color.fill};border:1.5px solid ${v.color.stroke};display:inline-block;"></span>
+          ${v.vendor} <span style="font-weight:400;color:#b8b8b3;">(n=${v.n})</span>
+        </div>
+        <div class="t-row"><span>최소~최대</span><span>${fmt(v.min)} ~ ${fmt(v.max)}</span></div>
+        <div class="t-row"><span>중앙값</span><span>${fmt(v.med)}</span></div>
+      </div>`).join('');
+  }
   bpTooltip.innerHTML = `
-    <div class="t-title">${s.grade} <span style="font-weight:400;color:#b8b8b3;">(n=${s.n})</span></div>
+    <div class="t-title">${s.grade} <span style="font-weight:400;color:#b8b8b3;">(n=${s.n}, 전체 구매처)</span></div>
     <div class="t-row"><span>최소</span><span>${fmt(s.min)}</span></div>
     <div class="t-row"><span>Q1</span><span>${fmt(s.q1)}</span></div>
     <div class="t-row"><span>중앙값</span><span>${fmt(s.med)}</span></div>
     <div class="t-row"><span>Q3</span><span>${fmt(s.q3)}</span></div>
     <div class="t-row"><span>최대</span><span>${fmt(s.max)}</span></div>
     <div class="t-row"><span>평균</span><span>${fmt(s.mean)}</span></div>
+    ${vendorHtml}
   `;
   bpTooltip.style.display = 'block';
 }
@@ -407,6 +452,25 @@ function currentFiltered(){
   );
 }
 
+const vendorListMajorTitle = document.getElementById('vendorListMajorTitle');
+const vendorListMajorEl = document.getElementById('vendorListMajor');
+const vendorListMajorMidTitle = document.getElementById('vendorListMajorMidTitle');
+const vendorListMajorMidEl = document.getElementById('vendorListMajorMid');
+
+function renderVendorLists(){
+  const byMajor = RAW.filter(d => state.major==='전체' || d['대분류']===state.major);
+  const vendorsMajor = Array.from(new Set(byMajor.map(d=>d['구매처명']))).sort((a,b)=>a.localeCompare(b,'ko'));
+
+  const byMajorMid = currentFiltered();
+  const vendorsMajorMid = Array.from(new Set(byMajorMid.map(d=>d['구매처명']))).sort((a,b)=>a.localeCompare(b,'ko'));
+
+  vendorListMajorTitle.textContent = `대분류: ${state.major} 기준 구매처 (${vendorsMajor.length}개)`;
+  vendorListMajorEl.innerHTML = vendorsMajor.map(v=>`<span class="vendor-pill">${v}</span>`).join('') || '<span class="empty" style="padding:8px;">해당 없음</span>';
+
+  vendorListMajorMidTitle.textContent = `대분류: ${state.major} + 중분류: ${state.mid} 기준 구매처 (${vendorsMajorMid.length}개)`;
+  vendorListMajorMidEl.innerHTML = vendorsMajorMid.map(v=>`<span class="vendor-pill">${v}</span>`).join('') || '<span class="empty" style="padding:8px;">해당 없음</span>';
+}
+
 // ---------- 차트 렌더 ----------
 const chartHost = document.getElementById('chartHost');
 const rowCountBadge = document.getElementById('rowCountBadge');
@@ -421,6 +485,7 @@ function render(){
   if(grades.length===0){
     chartHost.innerHTML = '<div class="empty">선택한 조건에 해당하는 데이터가 없습니다.</div>';
     statTable.innerHTML = '';
+    renderVendorLists();
     return;
   }
 
@@ -433,7 +498,8 @@ function render(){
   const globalMin = Math.min(0, ...groupStats.map(s=>s.min));
 
   // ---- SVG geometry ----
-  const rowH = 76;
+  const vendorRowGap = 19;
+  const rowH = 76 + state.vendors.length * vendorRowGap;
   const leftPad = 190;
   const rightPad = 40;
   const topPad = 18;
@@ -466,6 +532,8 @@ function render(){
     svg += `<text x="${x}" y="${topPad+chartH+18}" font-size="10.5" fill="#6b6b66" text-anchor="middle" class="mono">${fmt(t)}</text>`;
   });
   svg += `<text x="${leftPad+chartW/2}" y="${H-6}" font-size="10.5" fill="#6b6b66" text-anchor="middle">서비스단가 (원)</text>`;
+
+  const rowVendorStats = [];
 
   groupStats.forEach((s, i)=>{
     const rowTop = topPad + i*rowH;
@@ -509,17 +577,32 @@ function render(){
       svg += `<circle cx="${xScale(o)}" cy="${cy}" r="2.6" fill="#fff" stroke="#8a8a85" stroke-width="1.1"/>`;
     });
 
-    // vendor overlay markers
+    // 업체별 미니 박스플롯 (기존 박스플롯 위/아래에 겹쳐 표시, 파스텔톤으로 구분)
+    const vendorStatsThisRow = [];
     state.vendors.forEach((v, vi)=>{
       const pts = filtered.filter(d=>d['서비스등급']===s.grade && d['구매처명']===v).map(d=>d['서비스단가']);
       if(pts.length===0) return;
-      const offset = (vi - (state.vendors.length-1)/2) * 8;
-      pts.forEach(p=>{
-        const x = xScale(p);
-        const y = cy + offset;
-        svg += vendorMarkerSvg(x,y,vi);
-      });
+      const vs = computeStats(pts);
+      const color = PASTEL[vi % PASTEL.length];
+      vendorStatsThisRow.push({vendor:v, color, ...vs});
+
+      const vy = cy + 20 + vi*vendorRowGap;
+      const vBoxH = 12;
+      const vBoxTop = vy - vBoxH/2;
+
+      // 수염
+      svg += `<line x1="${xScale(vs.whiskerLow)}" y1="${vy}" x2="${xScale(vs.q1)}" y2="${vy}" stroke="${color.stroke}" stroke-width="1.2"/>`;
+      svg += `<line x1="${xScale(vs.q3)}" y1="${vy}" x2="${xScale(vs.whiskerHigh)}" y2="${vy}" stroke="${color.stroke}" stroke-width="1.2"/>`;
+      svg += `<line x1="${xScale(vs.whiskerLow)}" y1="${vy-3.5}" x2="${xScale(vs.whiskerLow)}" y2="${vy+3.5}" stroke="${color.stroke}" stroke-width="1.2"/>`;
+      svg += `<line x1="${xScale(vs.whiskerHigh)}" y1="${vy-3.5}" x2="${xScale(vs.whiskerHigh)}" y2="${vy+3.5}" stroke="${color.stroke}" stroke-width="1.2"/>`;
+      // 박스 (q1===q3인 경우 최소폭 보정)
+      svg += `<rect x="${xScale(vs.q1)}" y="${vBoxTop}" width="${Math.max(2,xScale(vs.q3)-xScale(vs.q1))}" height="${vBoxH}" fill="${color.fill}" fill-opacity="0.85" stroke="${color.stroke}" stroke-width="1.1"/>`;
+      // 중앙값
+      svg += `<line x1="${xScale(vs.med)}" y1="${vBoxTop}" x2="${xScale(vs.med)}" y2="${vBoxTop+vBoxH}" stroke="${color.stroke}" stroke-width="1.6"/>`;
     });
+
+    // 호버 툴팁 데이터 기록
+    rowVendorStats[i] = vendorStatsThisRow;
 
     // 호버 툴팁용 히트 영역 (박스+수염 전체를 덮는 투명 사각형)
     svg += `<rect class="hit-row" data-idx="${i}" x="${leftPad}" y="${rowTop}" width="${chartW}" height="${rowH}" fill="transparent" style="cursor:pointer;"/>`;
@@ -530,11 +613,15 @@ function render(){
 
   // ---- 호버 툴팁 ----
   chartHost.querySelectorAll('.hit-row').forEach(el=>{
-    const s = groupStats[Number(el.dataset.idx)];
-    el.addEventListener('mouseenter', ()=> showTooltip(s));
+    const idx = Number(el.dataset.idx);
+    const s = groupStats[idx];
+    const vStats = rowVendorStats[idx];
+    el.addEventListener('mouseenter', ()=> showTooltip(s, vStats));
     el.addEventListener('mousemove', (e)=> moveTooltip(e));
     el.addEventListener('mouseleave', ()=> hideTooltip());
   });
+
+  renderVendorLists();
 
   // ---- 통계 테이블 ----
   let thead = `<tr><th>서비스등급</th><th>건수</th><th>최소</th><th>Q1</th><th>중앙값</th><th>Q3</th><th>최대</th><th>평균</th></tr>`;
@@ -550,20 +637,6 @@ function render(){
       <td class="mono">${fmt(s.mean)}</td>
     </tr>`).join('');
   statTable.innerHTML = thead + tbody;
-}
-
-function vendorMarkerSvg(x,y,vi){
-  const shapes = [
-    (x,y)=>`<path d="M ${x} ${y-5} L ${x+5} ${y} L ${x} ${y+5} L ${x-5} ${y} Z" fill="#1c1c1a" stroke="#fff" stroke-width="1"/>`,
-    (x,y)=>`<rect x="${x-4}" y="${y-4}" width="8" height="8" fill="#1c1c1a" stroke="#fff" stroke-width="1"/>`,
-    (x,y)=>`<path d="M ${x} ${y-5} L ${x+5} ${y+4} L ${x-5} ${y+4} Z" fill="#1c1c1a" stroke="#fff" stroke-width="1"/>`,
-    (x,y)=>`<circle cx="${x}" cy="${y}" r="4.5" fill="#1c1c1a" stroke="#fff" stroke-width="1"/>`,
-    (x,y)=>`<path d="M ${x} ${y-5} L ${x+5} ${y} L ${x} ${y+5} L ${x-5} ${y} Z" fill="#fff" stroke="#1c1c1a" stroke-width="1.4"/>`,
-    (x,y)=>`<rect x="${x-4}" y="${y-4}" width="8" height="8" fill="#fff" stroke="#1c1c1a" stroke-width="1.4"/>`,
-    (x,y)=>`<path d="M ${x} ${y-5} L ${x+5} ${y+4} L ${x-5} ${y+4} Z" fill="#fff" stroke="#1c1c1a" stroke-width="1.4"/>`,
-    (x,y)=>`<circle cx="${x}" cy="${y}" r="4.5" fill="#fff" stroke="#1c1c1a" stroke-width="1.4"/>`,
-  ];
-  return shapes[vi%shapes.length](x,y);
 }
 
 // ---------- 데이터 로드 (엑셀 참조) ----------
