@@ -47,7 +47,33 @@
         flex:1 1 auto;
         min-height:55vh;
       }
+      .back-btn{
+        display:flex;
+        align-items:center;
+        gap:6px;
+        margin:10px 12px;
+        padding:8px 12px;
+        border-radius:10px;
+        border:1px solid #d1d5db;
+        background:#fff;
+        color:var(--ink);
+        font-size:13px;
+        font-weight:600;
+        cursor:pointer;
+        width:fit-content;
+      }
+      /* 기본(카테고리 목록) 상태: 본문/뒤로가기 숨김 */
+      .layout:not(.show-content) .main{ display:none; }
+      /* 콘텐츠 보기 상태: 사이드바 숨김, 본문 전체화면 */
+      .layout.show-content .sidebar{ display:none; }
+      .layout.show-content .main{
+        display:flex;
+        flex-direction:column;
+        min-height:100vh;
+      }
+      .layout.show-content .viewer{ position:relative; flex:1; }
     }
+    .back-btn{ display:none; }
   </style>
 </head>
 <body>
@@ -61,6 +87,7 @@
     </aside>
 
     <main class="main">
+      <button id="backBtn" class="back-btn" type="button">← 카테고리 목록</button>
       <iframe id="viewer" class="viewer" src=""></iframe>
     </main>
   </div>
