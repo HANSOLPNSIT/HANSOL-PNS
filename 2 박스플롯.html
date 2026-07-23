@@ -185,10 +185,6 @@
           <label>중분류</label>
           <select id="selMid"></select>
         </div>
-        <div class="field" style="flex:2;min-width:280px;">
-          <label>서비스등급 (클릭하여 토글)</label>
-          <div class="grade-toggle" id="gradeToggle"></div>
-        </div>
       </div>
     </div>
   </div>
@@ -199,9 +195,16 @@
       <span class="count-badge" id="vendorCount"></span>
     </div>
     <div class="panel-body">
-      <div class="vendor-add">
-        <input type="text" id="vendorInput" placeholder="구매처명 검색 후 선택하여 추가 (예: 삼일, GSC ...)" autocomplete="off">
-        <div class="vendor-list" id="vendorList"></div>
+      <div class="filter-row" style="align-items:flex-start;">
+        <div class="field" style="min-width:220px;">
+          <label>구매처 목록에서 선택</label>
+          <select id="vendorSelect"><option value="">-- 구매처 선택 --</option></select>
+        </div>
+        <div class="vendor-add" style="flex:1;">
+          <label style="display:block;font-size:10.5px;color:var(--ink-soft);font-weight:700;letter-spacing:.03em;margin-bottom:5px;">직접 검색하여 추가</label>
+          <input type="text" id="vendorInput" placeholder="구매처명 검색 후 선택하여 추가 (예: 삼일, GSC ...)" autocomplete="off">
+          <div class="vendor-list" id="vendorList"></div>
+        </div>
       </div>
       <div class="chips" id="chips"></div>
       <div class="legend-note">추가한 업체의 개별 서비스단가는 각 서비스등급 행 위에 ◆ 표식과 업체별 지시선으로 표시됩니다. 회색 박스는 전체 구매처 기준 분포입니다.</div>
@@ -279,28 +282,24 @@ selMajor.addEventListener('change', ()=>{
 });
 selMid.addEventListener('change', ()=>{ state.mid = selMid.value; render(); });
 
-// ---------- UI: 서비스등급 토글 ----------
-const gradeToggle = document.getElementById('gradeToggle');
-function buildGradeToggle(){
-  gradeToggle.innerHTML = allGrades.map(g=>
-    `<div class="grade-btn ${state.activeGrades.has(g)?'active':''}" data-g="${g}">${g}</div>`
-  ).join('');
-  gradeToggle.querySelectorAll('.grade-btn').forEach(btn=>{
-    btn.addEventListener('click', ()=>{
-      const g = btn.dataset.g;
-      if(state.activeGrades.has(g)) state.activeGrades.delete(g);
-      else state.activeGrades.add(g);
-      buildGradeToggle();
-      render();
-    });
-  });
-}
-
 // ---------- UI: 업체추가 ----------
+const vendorSelect = document.getElementById('vendorSelect');
 const vendorInput = document.getElementById('vendorInput');
 const vendorList = document.getElementById('vendorList');
 const chipsEl = document.getElementById('chips');
 const vendorCountEl = document.getElementById('vendorCount');
+
+function fillVendorSelect(){
+  const options = allVendors.filter(v=>!state.vendors.includes(v));
+  vendorSelect.innerHTML = '<option value="">-- 구매처 선택 --</option>' +
+    options.map(v=>`<option value="${v}">${v}</option>`).join('');
+}
+vendorSelect.addEventListener('change', ()=>{
+  if(vendorSelect.value){
+    addVendor(vendorSelect.value);
+    vendorSelect.value = '';
+  }
+});
 
 function renderVendorList(query){
   const q = query.trim().toLowerCase();
@@ -326,11 +325,13 @@ function addVendor(v){
   if(state.vendors.includes(v)) return;
   if(state.vendors.length>=8){ alert('업체는 최대 8개까지 추가할 수 있습니다.'); return; }
   state.vendors.push(v);
+  fillVendorSelect();
   renderChips();
   render();
 }
 function removeVendor(v){
   state.vendors = state.vendors.filter(x=>x!==v);
+  fillVendorSelect();
   renderChips();
   render();
 }
@@ -402,8 +403,7 @@ function hideTooltip(){
 function currentFiltered(){
   return RAW.filter(d=>
     (state.major==='전체' || d['대분류']===state.major) &&
-    (state.mid==='전체' || d['중분류']===state.mid) &&
-    state.activeGrades.has(d['서비스등급'])
+    (state.mid==='전체' || d['중분류']===state.mid)
   );
 }
 
@@ -414,7 +414,7 @@ const statTable = document.getElementById('statTable');
 
 function render(){
   const filtered = currentFiltered();
-  const grades = allGrades.filter(g=>state.activeGrades.has(g) && filtered.some(d=>d['서비스등급']===g));
+  const grades = allGrades.filter(g=>filtered.some(d=>d['서비스등급']===g));
 
   rowCountBadge.textContent = filtered.length ? `데이터 ${filtered.length}건 · ${grades.length}개 등급` : '';
 
@@ -585,13 +585,12 @@ function initFromData(){
   state = {
     major:'전체',
     mid:'전체',
-    activeGrades: new Set(allGrades),
     vendors: []
   };
 
   fillSelect(selMajor, majors, state.major);
   fillSelect(selMid, midByMajor[state.major], state.mid);
-  buildGradeToggle();
+  fillVendorSelect();
   renderChips();
   render();
 
