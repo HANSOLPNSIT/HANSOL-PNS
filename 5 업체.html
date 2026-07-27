@@ -137,6 +137,7 @@
   /* 전체 조회 결과 테이블 전용: 중분류(4번째 열) 가운데 정렬, 프로젝트명(6번째 열) 왼쪽 정렬 */
   #allTable td:nth-child(4), #allTable th:nth-child(4){text-align:center;}
   #allTable td:nth-child(6), #allTable th:nth-child(6){text-align:left;}
+  #allTable td:nth-child(15), #allTable th:nth-child(15){text-align:left;}
   .stat-table tr:hover td{background:#f7f7f5;}
   .table-scroll{overflow:auto;max-height:520px;}
 
@@ -486,12 +487,11 @@ function renderVendorSummary(){
   const map = new Map();
   state.filtered.forEach(r=>{
     const key = r['구매처명'];
-    if(!map.has(key)) map.set(key, {count:0, amount:0});
+    if(!map.has(key)) map.set(key, {count:0});
     const o = map.get(key);
     o.count += 1;
-    o.amount += toNum(r['서비스금액']);
   });
-  const vendors = Array.from(map.entries()).sort((a,b)=>b[1].amount - a[1].amount);
+  const vendors = Array.from(map.entries()).sort((a,b)=>b[1].count - a[1].count);
 
   document.getElementById('vendorCountBadge').textContent = `${vendors.length}개 업체 · ${state.filtered.length}건`;
 
@@ -501,12 +501,11 @@ function renderVendorSummary(){
     return;
   }
   table.innerHTML =
-    '<thead><tr><th>업체명(구매처명)</th><th>PO 건수</th><th>서비스금액 합계</th></tr></thead>' +
+    '<thead><tr><th>업체명(구매처명)</th><th>PO 건수</th></tr></thead>' +
     '<tbody>' + vendors.map(([name,o])=>`
       <tr data-vendor="${escAttr(name)}" class="${state.selectedVendor===name?'selected':''}">
         <td class="name">${escHtml(name)}</td>
         <td class="num">${fmtNum(o.count)}건</td>
-        <td class="num">${fmtNum(o.amount)}원</td>
       </tr>`).join('') + '</tbody>';
 
   table.querySelectorAll('tbody tr').forEach(tr=>{
