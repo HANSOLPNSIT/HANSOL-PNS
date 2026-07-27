@@ -134,6 +134,9 @@
   .stat-table th{background:#efefeb;text-align:center;font-weight:700;color:var(--ink-soft);font-size:11px;position:sticky;top:0;z-index:5;}
   .stat-table td:nth-child(2), .stat-table th:nth-child(2){text-align:left;}
   .stat-table td:nth-child(3), .stat-table th:nth-child(3){text-align:left;}
+  /* 전체 조회 결과 테이블 전용: 중분류(4번째 열) 가운데 정렬, 프로젝트명(6번째 열) 왼쪽 정렬 */
+  #allTable td:nth-child(4), #allTable th:nth-child(4){text-align:center;}
+  #allTable td:nth-child(6), #allTable th:nth-child(6){text-align:left;}
   .stat-table tr:hover td{background:#f7f7f5;}
   .table-scroll{overflow:auto;max-height:520px;}
 
