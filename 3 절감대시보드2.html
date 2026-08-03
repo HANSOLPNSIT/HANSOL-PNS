@@ -221,26 +221,12 @@ tr.reason-row.hidden{display:none}
     </div>
 
     <div class="card" style="margin-top:14px">
-      <strong id="orderStatsTitle">총 발주금액 대비 절감 현황</strong>
-      <div class="legend" style="margin-top:4px">총판프로젝트(구매처명에 '한국화웨이' 또는 '엑스퓨전/엑스퓨젼'이 포함된 건)는 통화가 다를 수 있어 별도로 집계합니다.</div>
-
-      <div style="margin-top:12px;font-size:13px;font-weight:600">총판프로젝트 제외</div>
-      <table id="orderStatsNormalTable" style="margin-top:6px">
+      <strong id="groupOrderStatsTitle">구매그룹별 총 발주금액 및 절감율</strong>
+      <div class="legend" style="margin-top:4px">구매그룹 740(ITO계약)과 400·300(프로젝트계약/투자 또는 자산)을 구분해서 집계, 통화(KRW/USD)별로 표시 · 행을 클릭하면 상세 리스트가 펼쳐집니다</div>
+      <table id="groupOrderStatsTable" style="margin-top:10px">
         <thead>
           <tr>
-            <th>통화</th>
-            <th>총 발주금액</th>
-            <th>총 절감금액</th>
-            <th>절감율</th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-
-      <div style="margin-top:16px;font-size:13px;font-weight:600">총판프로젝트</div>
-      <table id="orderStatsDispatchTable" style="margin-top:6px">
-        <thead>
-          <tr>
+            <th>구분</th>
             <th>통화</th>
             <th>총 발주금액</th>
             <th>총 절감금액</th>
@@ -259,23 +245,6 @@ tr.reason-row.hidden{display:none}
           <tr>
             <th>구분</th>
             <th>발주건수</th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-    </div>
-
-    <div class="card" style="margin-top:14px">
-      <strong id="groupOrderStatsTitle">구매그룹별 총 발주금액 및 절감율</strong>
-      <div class="legend" style="margin-top:4px">구매그룹 740(ITO계약)과 400·300(프로젝트계약/투자 또는 자산)을 구분해서 집계, 통화(KRW/USD)별로 표시</div>
-      <table id="groupOrderStatsTable" style="margin-top:10px">
-        <thead>
-          <tr>
-            <th>구분</th>
-            <th>통화</th>
-            <th>총 발주금액</th>
-            <th>총 절감금액</th>
-            <th>절감율</th>
           </tr>
         </thead>
         <tbody></tbody>
@@ -472,28 +441,7 @@ function aggregatePurchaseGroups(rows, targetYear){
   return { counts, dispatchCount };
 }
 
-// 선택 연도 전체 PO 기준 총 발주금액/절감금액/절감율 집계 (총판프로젝트는 통화가 다를 수 있어 별도 분리, 통화별로도 구분)
-function aggregateOrderStats(rows, targetYear){
-  const normal = new Map();   // currency -> {orderSum, savingsSum}
-  const dispatch = new Map(); // currency -> {orderSum, savingsSum}
-
-  for(const r of rows){
-    const d = parseKoreanDate(r['PO 생성일']);
-    if(!d || d.getUTCFullYear()!==targetYear) continue;
-
-    const orderAmt = parseAmount(r['발주금액']);
-    const savingsAmt = parseAmount(r['절감금액']);
-    const currency = getCurrency(r);
-    const bucket = isDispatchRow(r) ? dispatch : normal;
-
-    if(!bucket.has(currency)) bucket.set(currency, {orderSum:0, savingsSum:0});
-    const b = bucket.get(currency);
-    b.orderSum += orderAmt;
-    b.savingsSum += savingsAmt;
-  }
-
-  return { normal, dispatch };
-}
+// 선택 연도 전체 PO 기준 구매그룹 코드 파싱
 
 function parseGroupCode(v){
   if(v==null || v==='') return null;
@@ -599,7 +547,6 @@ function renderAll(rows){
   `;
 
   renderPurchaseGroupTable(rows, year);
-  renderOrderStats(rows, year);
   renderGroupOrderStats(rows, year);
 }
 
@@ -644,35 +591,6 @@ function fmtAmtByCurrency(n, currency){
   return currency==='KRW' ? (formatted + '원') : (formatted + ' ' + currency);
 }
 
-function renderOrderStatsTable(tableSelector, map){
-  const tbody = document.createElement('tbody');
-  if(!map.size){
-    tbody.innerHTML = `<tr><td colspan="4" class="muted">해당 연도에 데이터가 없습니다.</td></tr>`;
-  } else {
-    for(const [currency, v] of map.entries()){
-      const rate = v.orderSum>0 ? (v.savingsSum/v.orderSum) : null;
-      const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td>${currency}</td>
-        <td>${fmtAmtByCurrency(v.orderSum, currency)}</td>
-        <td>${fmtAmtByCurrency(v.savingsSum, currency)}</td>
-        <td>${fmtPct(rate)}</td>
-      `;
-      tbody.appendChild(tr);
-    }
-  }
-  const table = $(tableSelector);
-  const oldTbody = table.querySelector('tbody');
-  oldTbody.replaceWith(tbody);
-}
-
-function renderOrderStats(rows, year){
-  $('#orderStatsTitle').textContent = `${year}년 총 발주금액 대비 절감 현황`;
-  const { normal, dispatch } = aggregateOrderStats(rows, year);
-  renderOrderStatsTable('#orderStatsNormalTable', normal);
-  renderOrderStatsTable('#orderStatsDispatchTable', dispatch);
-}
-
 function renderGroupOrderStats(rows, year){
   $('#groupOrderStatsTitle').textContent = `${year}년 구매그룹별 총 발주금액 및 절감율`;
   const map = aggregateOrderStatsByGroup(rows, year);
@@ -686,15 +604,32 @@ function renderGroupOrderStats(rows, year){
     any = true;
     for(const [currency, v] of curMap.entries()){
       const rate = v.orderSum>0 ? (v.savingsSum/v.orderSum) : null;
+
       const tr = document.createElement('tr');
+      tr.className = 'month-row';
       tr.innerHTML = `
-        <td>${label}</td>
+        <td><span class="caret">▶</span>${label}</td>
         <td>${currency}</td>
         <td>${fmtAmtByCurrency(v.orderSum, currency)}</td>
         <td>${fmtAmtByCurrency(v.savingsSum, currency)}</td>
         <td>${fmtPct(rate)}</td>
       `;
+
+      const detailTr = document.createElement('tr');
+      detailTr.className = 'detail-row hidden';
+      const detailTd = document.createElement('td');
+      detailTd.colSpan = 5;
+      detailTd.appendChild(buildGroupDetailTable(year, label, currency));
+      detailTr.appendChild(detailTd);
+
+      tr.addEventListener('click', ()=>{
+        const isOpen = tr.classList.contains('open');
+        tr.classList.toggle('open', !isOpen);
+        detailTr.classList.toggle('hidden', isOpen);
+      });
+
       tbody.appendChild(tr);
+      tbody.appendChild(detailTr);
     }
   }
   if(!any){
@@ -706,15 +641,10 @@ function renderGroupOrderStats(rows, year){
   oldTbody.replaceWith(tbody);
 }
 
-function buildDetailTable(year, month){
-  const rows = (window.__ROWS||[]);
-  const pick = (r, k)=> r[k];
-  const filtered = rows.filter(r=>{
-    const d = parseKoreanDate(pick(r,'PO 생성일'));
-    if(!(d && d.getUTCFullYear()===year && (d.getUTCMonth()+1)===month)) return false;
-    const amt = parseAmount(pick(r,'절감금액'));
-    return amt > 0;
-  });
+function buildDetailTableGeneric(filtered, opts){
+  const includeOrderAmt = !!(opts && opts.includeOrderAmt);
+  const emptyMessage = (opts && opts.emptyMessage) || '해당 데이터가 없습니다.';
+  const colCount = includeOrderAmt ? 7 : 6;
 
   const table = document.createElement('table');
   table.className = 'detail-inner-table';
@@ -725,6 +655,7 @@ function buildDetailTable(year, month){
       <th>PO번호</th>
       <th>구매처명</th>
       <th>구매오더내역</th>
+      ${includeOrderAmt ? '<th class="muted">발주금액</th>' : ''}
       <th class="muted">절감금액</th>
       <th class="muted">절감율</th>
     </tr>`;
@@ -734,18 +665,18 @@ function buildDetailTable(year, month){
   if(!filtered.length){
     const tr = document.createElement('tr');
     const td = document.createElement('td');
-    td.colSpan = 6; td.className='muted';
-    td.textContent = '해당 월에 절감금액이 있는 상세 데이터가 없습니다.';
+    td.colSpan = colCount; td.className='muted';
+    td.textContent = emptyMessage;
     tr.appendChild(td); tbody.appendChild(tr);
   } else {
     const reasonMap = window.__REASON_MAP || new Map();
     for(const r of filtered){
-      const d = parseKoreanDate(pick(r,'PO 생성일'));
-      const po = pick(r,'PO번호');
-      const vend = pick(r,'구매처명');
-      const line = pick(r,'구매오더내역');
-      const amt = parseAmount(pick(r,'절감금액'));
-      const rate = normRate(pick(r,'절감율'));
+      const d = parseKoreanDate(r['PO 생성일']);
+      const po = r['PO번호'];
+      const vend = r['구매처명'];
+      const line = r['구매오더내역'];
+      const amt = parseAmount(r['절감금액']);
+      const rate = normRate(r['절감율']);
       const reason = reasonMap.get(normPoNo(po)) || '';
 
       const tr = document.createElement('tr');
@@ -755,6 +686,7 @@ function buildDetailTable(year, month){
         <td>${po??''}</td>
         <td>${vend??''}</td>
         <td>${line??''}</td>
+        ${includeOrderAmt ? `<td class="muted">${fmtAmtByCurrency(parseAmount(r['발주금액']), getCurrency(r))}</td>` : ''}
         <td class="muted">${fmtWon(amt)}</td>
         <td class="muted">${fmtPct(rate)}</td>
       `;
@@ -762,7 +694,7 @@ function buildDetailTable(year, month){
       const reasonTr = document.createElement('tr');
       reasonTr.className = 'reason-row hidden';
       const reasonTd = document.createElement('td');
-      reasonTd.colSpan = 6;
+      reasonTd.colSpan = colCount;
       reasonTd.innerHTML = `<span class="muted">절감사유:</span> ${reason ? reason : '<span class="muted">등록된 절감사유가 없습니다.</span>'}`;
       reasonTr.appendChild(reasonTd);
 
@@ -778,6 +710,37 @@ function buildDetailTable(year, month){
   }
   table.appendChild(tbody);
   return table;
+}
+
+function buildDetailTable(year, month){
+  const rows = (window.__ROWS||[]);
+  const filtered = rows.filter(r=>{
+    const d = parseKoreanDate(r['PO 생성일']);
+    if(!(d && d.getUTCFullYear()===year && (d.getUTCMonth()+1)===month)) return false;
+    const amt = parseAmount(r['절감금액']);
+    return amt > 0;
+  });
+  return buildDetailTableGeneric(filtered, {
+    includeOrderAmt: false,
+    emptyMessage: '해당 월에 절감금액이 있는 상세 데이터가 없습니다.'
+  });
+}
+
+// 구매그룹(740 / 400+300) + 통화 기준 상세 리스트 (발주금액 열 포함)
+function buildGroupDetailTable(year, groupLabel, currency){
+  const rows = (window.__ROWS||[]);
+  const filtered = rows.filter(r=>{
+    const d = parseKoreanDate(r['PO 생성일']);
+    if(!(d && d.getUTCFullYear()===year)) return false;
+    if(mapGroupBucket(parseGroupCode(r['구매그룹'])) !== groupLabel) return false;
+    if(getCurrency(r) !== currency) return false;
+    const amt = parseAmount(r['절감금액']);
+    return amt > 0;
+  });
+  return buildDetailTableGeneric(filtered, {
+    includeOrderAmt: true,
+    emptyMessage: '해당 구분에 절감금액이 있는 상세 데이터가 없습니다.'
+  });
 }
 
 function exportToExcel(){
@@ -815,33 +778,6 @@ function exportToExcel(){
   summaryAoa.push(['합계', groupTotal]);
   summaryAoa.push(['총판프로젝트 (구매처명에 한국화웨이/엑스퓨전(젼) 포함, 중복 포함)', dispatchCount]);
 
-  // 총 발주금액 대비 절감 현황 (총판프로젝트 제외 / 총판프로젝트 통화별 구분)
-  const { normal: orderNormal, dispatch: orderDispatch } = aggregateOrderStats(window.__ROWS, year);
-  const pctRows = []; // 절감율(%) 서식 적용 대상 행 번호
-  const amtRowsBC = []; // 발주금액/절감금액(#,##0) 서식 적용 대상 행 번호 (B,C열)
-
-  summaryAoa.push([]);
-  summaryAoa.push(['총 발주금액 대비 절감 현황 (총판프로젝트 제외)']);
-  summaryAoa.push(['통화', '총 발주금액', '총 절감금액', '절감율']);
-  for(const [currency, v] of orderNormal.entries()){
-    const rate = v.orderSum>0 ? v.savingsSum/v.orderSum : '';
-    summaryAoa.push([currency, Math.round(v.orderSum), Math.round(v.savingsSum), rate]);
-    const rowNum = summaryAoa.length;
-    pctRows.push(rowNum);
-    amtRowsBC.push(rowNum);
-  }
-
-  summaryAoa.push([]);
-  summaryAoa.push(['총판프로젝트 발주금액 및 절감 현황 (통화 상이할 수 있음)']);
-  summaryAoa.push(['통화', '총 발주금액', '총 절감금액', '절감율']);
-  for(const [currency, v] of orderDispatch.entries()){
-    const rate = v.orderSum>0 ? v.savingsSum/v.orderSum : '';
-    summaryAoa.push([currency, Math.round(v.orderSum), Math.round(v.savingsSum), rate]);
-    const rowNum = summaryAoa.length;
-    pctRows.push(rowNum);
-    amtRowsBC.push(rowNum);
-  }
-
   // 구매그룹(740 / 400+300)별 총 발주금액 및 절감율
   const groupOrderMap = aggregateOrderStatsByGroup(window.__ROWS, year);
   const groupOrderOrder = [GROUP_BUCKET_740, GROUP_BUCKET_400_300];
@@ -872,17 +808,6 @@ function exportToExcel(){
     if(rateCell && typeof rateCell.v === 'number') rateCell.z = '0.0%';
     const amtCell = wsSummary[`C${i}`];
     if(amtCell && typeof amtCell.v === 'number') amtCell.z = '#,##0';
-  }
-  // 총 발주금액 섹션의 % / 금액 서식 적용
-  for(const rowNum of pctRows){
-    const cell = wsSummary[`D${rowNum}`];
-    if(cell && typeof cell.v === 'number') cell.z = '0.0%';
-  }
-  for(const rowNum of amtRowsBC){
-    const cellB = wsSummary[`B${rowNum}`];
-    if(cellB && typeof cellB.v === 'number') cellB.z = '#,##0';
-    const cellC = wsSummary[`C${rowNum}`];
-    if(cellC && typeof cellC.v === 'number') cellC.z = '#,##0';
   }
   // 구매그룹별 총 발주금액 섹션의 % / 금액 서식 적용 (C,D열 금액 / E열 %)
   for(const rowNum of pctRowsGroup){
