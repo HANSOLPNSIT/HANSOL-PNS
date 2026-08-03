@@ -222,7 +222,7 @@ tr.reason-row.hidden{display:none}
 
     <div class="card" style="margin-top:14px">
       <strong id="orderStatsTitle">총 발주금액 대비 절감 현황</strong>
-      <div class="legend" style="margin-top:4px">총판프로젝트(WBS CODE가 DHW/DXF로 시작)는 통화가 다를 수 있어 별도로 집계합니다.</div>
+      <div class="legend" style="margin-top:4px">총판프로젝트(구매처명이 한국화웨이 또는 엑스퓨전)는 통화가 다를 수 있어 별도로 집계합니다.</div>
 
       <div style="margin-top:12px;font-size:13px;font-weight:600">총판프로젝트 제외</div>
       <table id="orderStatsNormalTable" style="margin-top:6px">
@@ -266,7 +266,7 @@ tr.reason-row.hidden{display:none}
     </div>
 
     <div class="footer">
-      ⚙️ 열 이름 매핑(PO 시트): <code>PO 생성일</code>, <code>PO번호</code>, <code>구매처명</code>, <code>구매오더내역</code>, <code>절감금액</code>, <code>절감율</code>, <code>구매그룹</code>, <code>WBS CODE</code>, <code>발주금액</code>, <code>통화키</code>. 헤더는 1행에 위치해야 합니다.
+      ⚙️ 열 이름 매핑(PO 시트): <code>PO 생성일</code>, <code>PO번호</code>, <code>구매처명</code>, <code>구매오더내역</code>, <code>절감금액</code>, <code>절감율</code>, <code>구매그룹</code>, <code>발주금액</code>, <code>통화키</code>. 헤더는 1행에 위치해야 합니다.
     </div>
   </div>
 
@@ -428,10 +428,11 @@ function mapPurchaseGroup(v){
   }
 }
 
-// WBS CODE가 DHW/DXF로 시작하는지 여부 (총판프로젝트 판별)
+// 구매처명이 한국화웨이 또는 엑스퓨전인지 여부 (총판프로젝트 판별)
+const DISPATCH_VENDORS = ['한국화웨이', '엑스퓨전'];
 function isDispatchRow(r){
-  const wbs = String(r['WBS CODE'] ?? '').trim().toUpperCase();
-  return wbs.startsWith('DHW') || wbs.startsWith('DXF');
+  const vendor = String(r['구매처명'] ?? '').trim();
+  return DISPATCH_VENDORS.includes(vendor);
 }
 
 function getCurrency(r){
@@ -442,7 +443,7 @@ function getCurrency(r){
 // 선택 연도 전체 PO 기준 구매그룹별 발주건수 집계
 function aggregatePurchaseGroups(rows, targetYear){
   const counts = new Map();
-  let dispatchCount = 0; // 총판프로젝트 (WBS CODE가 DHW/DXF로 시작하는 건, 구매그룹 분류와 별개로 추가 집계)
+  let dispatchCount = 0; // 총판프로젝트 (구매처명이 한국화웨이/엑스퓨전인 건, 구매그룹 분류와 별개로 추가 집계)
   for(const r of rows){
     const d = parseKoreanDate(r['PO 생성일']);
     if(!d || d.getUTCFullYear()!==targetYear) continue;
@@ -572,9 +573,9 @@ function renderPurchaseGroupTable(rows, year){
     tbody.appendChild(totalTr);
   }
 
-  // 총판프로젝트 (WBS CODE 기준, 구매그룹 분류와 중복 포함 가능한 추가 집계)
+  // 총판프로젝트 (구매처명 기준, 구매그룹 분류와 중복 포함 가능한 추가 집계)
   const dispatchTr = document.createElement('tr');
-  dispatchTr.innerHTML = `<td>총판프로젝트 <span class="legend">(WBS CODE가 DHW/DXF로 시작, 위 분류와 중복 가능)</span></td><td>${dispatchCount.toLocaleString('ko-KR')}건</td>`;
+  dispatchTr.innerHTML = `<td>총판프로젝트 <span class="legend">(구매처명이 한국화웨이/엑스퓨전, 위 분류와 중복 가능)</span></td><td>${dispatchCount.toLocaleString('ko-KR')}건</td>`;
   tbody.appendChild(dispatchTr);
 
   const table = $('#groupTable');
@@ -724,7 +725,7 @@ function exportToExcel(){
     summaryAoa.push([label, c]);
   }
   summaryAoa.push(['합계', groupTotal]);
-  summaryAoa.push(['총판프로젝트 (WBS CODE DHW/DXF, 중복 포함)', dispatchCount]);
+  summaryAoa.push(['총판프로젝트 (구매처명 한국화웨이/엑스퓨전, 중복 포함)', dispatchCount]);
 
   // 총 발주금액 대비 절감 현황 (총판프로젝트 제외 / 총판프로젝트 통화별 구분)
   const { normal: orderNormal, dispatch: orderDispatch } = aggregateOrderStats(window.__ROWS, year);
