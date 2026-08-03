@@ -222,7 +222,7 @@ tr.reason-row.hidden{display:none}
 
     <div class="card" style="margin-top:14px">
       <strong id="orderStatsTitle">총 발주금액 대비 절감 현황</strong>
-      <div class="legend" style="margin-top:4px">총판프로젝트(구매처명이 한국화웨이 또는 엑스퓨전)는 통화가 다를 수 있어 별도로 집계합니다.</div>
+      <div class="legend" style="margin-top:4px">총판프로젝트(구매처명에 '한국화웨이' 또는 '엑스퓨전/엑스퓨젼'이 포함된 건)는 통화가 다를 수 있어 별도로 집계합니다.</div>
 
       <div style="margin-top:12px;font-size:13px;font-weight:600">총판프로젝트 제외</div>
       <table id="orderStatsNormalTable" style="margin-top:6px">
@@ -428,11 +428,11 @@ function mapPurchaseGroup(v){
   }
 }
 
-// 구매처명이 한국화웨이 또는 엑스퓨전인지 여부 (총판프로젝트 판별)
-const DISPATCH_VENDORS = ['한국화웨이', '엑스퓨전'];
+// 구매처명에 '한국화웨이' 또는 '엑스퓨전/엑스퓨젼'이 포함되는지 여부 (총판프로젝트 판별)
+const DISPATCH_VENDOR_KEYWORDS = ['한국화웨이', '엑스퓨전', '엑스퓨젼'];
 function isDispatchRow(r){
   const vendor = String(r['구매처명'] ?? '').trim();
-  return DISPATCH_VENDORS.includes(vendor);
+  return DISPATCH_VENDOR_KEYWORDS.some(kw => vendor.includes(kw));
 }
 
 function getCurrency(r){
@@ -443,7 +443,7 @@ function getCurrency(r){
 // 선택 연도 전체 PO 기준 구매그룹별 발주건수 집계
 function aggregatePurchaseGroups(rows, targetYear){
   const counts = new Map();
-  let dispatchCount = 0; // 총판프로젝트 (구매처명이 한국화웨이/엑스퓨전인 건, 구매그룹 분류와 별개로 추가 집계)
+  let dispatchCount = 0; // 총판프로젝트 (구매처명에 한국화웨이/엑스퓨전(젼)이 포함된 건, 구매그룹 분류와 별개로 추가 집계)
   for(const r of rows){
     const d = parseKoreanDate(r['PO 생성일']);
     if(!d || d.getUTCFullYear()!==targetYear) continue;
@@ -575,7 +575,7 @@ function renderPurchaseGroupTable(rows, year){
 
   // 총판프로젝트 (구매처명 기준, 구매그룹 분류와 중복 포함 가능한 추가 집계)
   const dispatchTr = document.createElement('tr');
-  dispatchTr.innerHTML = `<td>총판프로젝트 <span class="legend">(구매처명이 한국화웨이/엑스퓨전, 위 분류와 중복 가능)</span></td><td>${dispatchCount.toLocaleString('ko-KR')}건</td>`;
+  dispatchTr.innerHTML = `<td>총판프로젝트 <span class="legend">(구매처명에 한국화웨이/엑스퓨전(젼) 포함, 위 분류와 중복 가능)</span></td><td>${dispatchCount.toLocaleString('ko-KR')}건</td>`;
   tbody.appendChild(dispatchTr);
 
   const table = $('#groupTable');
@@ -725,7 +725,7 @@ function exportToExcel(){
     summaryAoa.push([label, c]);
   }
   summaryAoa.push(['합계', groupTotal]);
-  summaryAoa.push(['총판프로젝트 (구매처명 한국화웨이/엑스퓨전, 중복 포함)', dispatchCount]);
+  summaryAoa.push(['총판프로젝트 (구매처명에 한국화웨이/엑스퓨전(젼) 포함, 중복 포함)', dispatchCount]);
 
   // 총 발주금액 대비 절감 현황 (총판프로젝트 제외 / 총판프로젝트 통화별 구분)
   const { normal: orderNormal, dispatch: orderDispatch } = aggregateOrderStats(window.__ROWS, year);
