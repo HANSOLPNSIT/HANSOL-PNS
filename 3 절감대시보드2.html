@@ -222,7 +222,7 @@ tr.reason-row.hidden{display:none}
 
     <div class="card" style="margin-top:14px">
       <strong id="groupOrderStatsTitle">구매그룹별 총 발주금액 및 절감율</strong>
-      <div class="legend" style="margin-top:4px">구매그룹 740(ITO계약)과 400·300(프로젝트계약/투자 또는 자산)을 구분해서 집계, 통화(KRW/USD)별로 표시 · 행을 클릭하면 상세 리스트가 펼쳐집니다</div>
+      <div class="legend" style="margin-top:4px">구매그룹 740(ITO계약), 400·300(프로젝트계약/투자 또는 자산)으로 구분하고, 구매처명에 '화웨이' 또는 '엑스퓨젼'이 포함된 총판프로젝트는 별도로 분리해서 집계 · 통화(KRW/USD)별로 표시 · 행을 클릭하면 상세 리스트가 펼쳐집니다</div>
       <table id="groupOrderStatsTable" style="margin-top:10px">
         <thead>
           <tr>
@@ -414,8 +414,8 @@ function mapPurchaseGroup(v){
   }
 }
 
-// 구매처명에 '한국화웨이' 또는 '엑스퓨전/엑스퓨젼'이 포함되는지 여부 (총판프로젝트 판별)
-const DISPATCH_VENDOR_KEYWORDS = ['한국화웨이', '엑스퓨전', '엑스퓨젼'];
+// 구매처명에 '화웨이' 또는 '엑스퓨젼'이 포함되는지 여부 (총판프로젝트 판별)
+const DISPATCH_VENDOR_KEYWORDS = ['화웨이', '엑스퓨젼'];
 function isDispatchRow(r){
   const vendor = String(r['구매처명'] ?? '').trim();
   return DISPATCH_VENDOR_KEYWORDS.some(kw => vendor.includes(kw));
@@ -429,7 +429,7 @@ function getCurrency(r){
 // 선택 연도 전체 PO 기준 구매그룹별 발주건수 집계
 function aggregatePurchaseGroups(rows, targetYear){
   const counts = new Map();
-  let dispatchCount = 0; // 총판프로젝트 (구매처명에 한국화웨이/엑스퓨전(젼)이 포함된 건, 구매그룹 분류와 별개로 추가 집계)
+  let dispatchCount = 0; // 총판프로젝트 (구매처명에 화웨이/엑스퓨젼이 포함된 건, 구매그룹 분류와 별개로 추가 집계)
   for(const r of rows){
     const d = parseKoreanDate(r['PO 생성일']);
     if(!d || d.getUTCFullYear()!==targetYear) continue;
@@ -452,6 +452,7 @@ function parseGroupCode(v){
 
 const GROUP_BUCKET_740 = 'ITO계약 (구매그룹 740)';
 const GROUP_BUCKET_400_300 = '프로젝트계약·투자자산 (구매그룹 400/300)';
+const GROUP_BUCKET_DISPATCH = '총판프로젝트 (구매처명 화웨이/엑스퓨젼 포함)';
 
 function mapGroupBucket(code){
   if(code === 740) return GROUP_BUCKET_740;
@@ -459,14 +460,20 @@ function mapGroupBucket(code){
   return null;
 }
 
-// 구매그룹 740 / 400+300 기준 총 발주금액, 절감금액, 절감율 집계 (통화별 구분)
+// 총판프로젝트(구매처명 기준)를 먼저 판별하고, 아니면 구매그룹 코드로 분류
+function assignOrderGroupBucket(r){
+  if(isDispatchRow(r)) return GROUP_BUCKET_DISPATCH;
+  return mapGroupBucket(parseGroupCode(r['구매그룹']));
+}
+
+// 구매그룹 740 / 400+300 / 총판프로젝트 기준 총 발주금액, 절감금액, 절감율 집계 (통화별 구분)
 function aggregateOrderStatsByGroup(rows, targetYear){
   const map = new Map(); // bucketLabel -> Map(currency -> {orderSum, savingsSum})
   for(const r of rows){
     const d = parseKoreanDate(r['PO 생성일']);
     if(!d || d.getUTCFullYear()!==targetYear) continue;
 
-    const bucket = mapGroupBucket(parseGroupCode(r['구매그룹']));
+    const bucket = assignOrderGroupBucket(r);
     if(!bucket) continue;
 
     const currency = getCurrency(r);
@@ -577,7 +584,7 @@ function renderPurchaseGroupTable(rows, year){
 
   // 총판프로젝트 (구매처명 기준, 구매그룹 분류와 중복 포함 가능한 추가 집계)
   const dispatchTr = document.createElement('tr');
-  dispatchTr.innerHTML = `<td>총판프로젝트 <span class="legend">(구매처명에 한국화웨이/엑스퓨전(젼) 포함, 위 분류와 중복 가능)</span></td><td>${dispatchCount.toLocaleString('ko-KR')}건</td>`;
+  dispatchTr.innerHTML = `<td>총판프로젝트 <span class="legend">(구매처명에 화웨이/엑스퓨젼 포함, 위 분류와 중복 가능)</span></td><td>${dispatchCount.toLocaleString('ko-KR')}건</td>`;
   tbody.appendChild(dispatchTr);
 
   const table = $('#groupTable');
@@ -594,7 +601,7 @@ function fmtAmtByCurrency(n, currency){
 function renderGroupOrderStats(rows, year){
   $('#groupOrderStatsTitle').textContent = `${year}년 구매그룹별 총 발주금액 및 절감율`;
   const map = aggregateOrderStatsByGroup(rows, year);
-  const order = [GROUP_BUCKET_740, GROUP_BUCKET_400_300];
+  const order = [GROUP_BUCKET_740, GROUP_BUCKET_400_300, GROUP_BUCKET_DISPATCH];
 
   const tbody = document.createElement('tbody');
   let any = false;
@@ -732,7 +739,7 @@ function buildGroupDetailTable(year, groupLabel, currency){
   const filtered = rows.filter(r=>{
     const d = parseKoreanDate(r['PO 생성일']);
     if(!(d && d.getUTCFullYear()===year)) return false;
-    if(mapGroupBucket(parseGroupCode(r['구매그룹'])) !== groupLabel) return false;
+    if(assignOrderGroupBucket(r) !== groupLabel) return false;
     if(getCurrency(r) !== currency) return false;
     const amt = parseAmount(r['절감금액']);
     return amt > 0;
@@ -776,16 +783,16 @@ function exportToExcel(){
     summaryAoa.push([label, c]);
   }
   summaryAoa.push(['합계', groupTotal]);
-  summaryAoa.push(['총판프로젝트 (구매처명에 한국화웨이/엑스퓨전(젼) 포함, 중복 포함)', dispatchCount]);
+  summaryAoa.push(['총판프로젝트 (구매처명에 화웨이/엑스퓨젼 포함, 중복 포함)', dispatchCount]);
 
   // 구매그룹(740 / 400+300)별 총 발주금액 및 절감율
   const groupOrderMap = aggregateOrderStatsByGroup(window.__ROWS, year);
-  const groupOrderOrder = [GROUP_BUCKET_740, GROUP_BUCKET_400_300];
+  const groupOrderOrder = [GROUP_BUCKET_740, GROUP_BUCKET_400_300, GROUP_BUCKET_DISPATCH];
   const pctRowsGroup = []; // E열 절감율 서식 대상
   const amtRowsGroup = []; // C,D열 금액 서식 대상
 
   summaryAoa.push([]);
-  summaryAoa.push(['구매그룹별 총 발주금액 및 절감율 (740 / 400+300)']);
+  summaryAoa.push(['구매그룹별 총 발주금액 및 절감율 (740 / 400+300 / 총판프로젝트 별도)']);
   summaryAoa.push(['구분', '통화', '총 발주금액', '총 절감금액', '절감율']);
   for(const label of groupOrderOrder){
     const curMap = groupOrderMap.get(label);
