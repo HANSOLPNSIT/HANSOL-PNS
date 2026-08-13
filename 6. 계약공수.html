@@ -237,6 +237,12 @@
   }
   td.txt{font-family:var(--sans);}
   tr:last-child td{border-bottom:none;}
+  tfoot td{
+    font-weight:700;
+    border-top:2px solid var(--ink);
+    border-bottom:none;
+    background:var(--accent-soft);
+  }
 
   .bar-row{
     display:grid;
@@ -486,8 +492,9 @@
         <table>
           <thead><tr><th>단위</th><th style="text-align:right;">합계</th><th style="text-align:right;">M.M 환산</th><th style="text-align:right;">비중</th></tr></thead>
           <tbody id="unit-table"></tbody>
+          <tfoot id="unit-table-total"></tfoot>
         </table>
-        <p class="footnote">※ 합계는 단위별 원본 서비스수량임. "M.M 환산"은 M.D를 21 M.D = 1 M.M 기준으로 변환한 값(M.M은 원본 그대로, 그 외 단위는 해당 없음). 비중(%)은 이 환산값끼리 비교한 비율임.</p>
+        <p class="footnote">※ 합계는 단위별 원본 서비스수량임. "M.M 환산"은 M.D를 21 M.D = 1 M.M 기준으로 변환한 값(M.M은 원본 그대로, 그 외 단위는 해당 없음). 비중(%)은 이 환산값끼리 비교한 비율임. 표 하단 "합계(M.M+M.D 환산)"는 M.M과 M.D를 환산해 더한 전체 공수 합계이며, EA 등 다른 단위는 공수 성격이 아니므로 제외함.</p>
       </div>
     </div>
 
@@ -550,6 +557,7 @@ const els = {
   gradeBars: document.getElementById('grade-bars'),
   gradeTotalBadge: document.getElementById('grade-total-badge'),
   unitTable: document.getElementById('unit-table'),
+  unitTableTotal: document.getElementById('unit-table-total'),
   donutChart: document.getElementById('donut-chart'),
   donutLegend: document.getElementById('donut-legend'),
   gradeDual: document.getElementById('grade-dual-chart'),
@@ -745,6 +753,10 @@ function runQuery(){
     const mmEquiv = u === 'M.D' ? `${fmt(sum / MD_PER_MM, 2)} M/M` : (u === 'M.M' ? `${fmt(sum, 2)} M/M` : '–');
     return `<tr><td class="txt">${escapeHtml(u)}</td><td style="text-align:right;">${fmt(sum,2)}</td><td style="text-align:right;">${mmEquiv}</td><td style="text-align:right;">${fmt(pct,1)}%</td></tr>`;
   }).join('');
+
+  // M.M 환산 합계 (M.M 원본 + M.D÷21). EA 등 그 외 단위는 공수 성격이 아니므로 합계에서 제외.
+  const totalMMEquiv = (unitSums['M.M'] || 0) + (unitSums['M.D'] || 0) / MD_PER_MM;
+  els.unitTableTotal.innerHTML = `<tr><td class="txt">합계 (M.M+M.D 환산)</td><td style="text-align:right;">–</td><td style="text-align:right;">${fmt(totalMMEquiv,2)} M/M</td><td style="text-align:right;">–</td></tr>`;
 
   // 인원 집계: 서비스 라인 == 10
   const headcountRows = filtered.filter(r => r.line === 10);
