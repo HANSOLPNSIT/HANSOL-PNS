@@ -446,7 +446,6 @@
 <body>
 
 <div class="topbar">
-  <div class="eyebrow">Hansol PNS · IT 구매팀</div>
   <h1>용역 공수 투입 분석</h1>
   <p>기술분류 · 기술세부 · 기간별 서비스수량(공수) 및 투입 인원 조회 — 데이터 출처: 용역단가data 시트</p>
 </div>
@@ -664,18 +663,12 @@ async function loadData(isRefresh){
         note: (COL['비고'] !== undefined ? (get(COL['비고']) || '') : '').toString().trim(),
         poNumber: (COL['PO번호'] !== undefined ? (get(COL['PO번호']) || '') : '').toString().trim(),
         serviceDetail: (COL['서비스 기술내역'] !== undefined ? (get(COL['서비스 기술내역']) || '') : '').toString(),
-        vendor: (COL['구매처명'] !== undefined ? (get(COL['구매처명']) || '') : '').toString().trim(),
       };
     }).filter(r => r.poDate !== null)
       // 서비스 기술내역이 COST이거나 값이 비어있는 행은 등급내역 값 유무와 관계없이 무조건 집계 대상에서 제외함
       .filter(r => {
         const sd = r.serviceDetail.replace(/\s+/g, '');
         return sd !== '' && sd.toUpperCase() !== 'COST';
-      })
-      // 구매처명이 한솔PNS(IT 구매팀, 내부 발주) 인 행은 외부 용역 집계 대상이 아니므로 제외함
-      .filter(r => {
-        const v = r.vendor.replace(/\s+/g, '');
-        return !(v.includes('한솔PNS') || v.includes('한솔피엔에스'));
       });
 
     // 대분류/중분류 옵션 갱신. 새로고침(조회 버튼)인 경우 기존 선택값이 여전히 유효하면 유지함.
@@ -691,7 +684,7 @@ async function loadData(isRefresh){
       setDefaultDates();
     }
 
-    els.status.textContent = `데이터 로드 완료 · 총 ${RAW_ROWS.length.toLocaleString()}건 (서비스 기술내역=COST 또는 값 없음, 구매처=한솔PNS 행 제외) · ${new Date().toLocaleTimeString('ko-KR')} 기준`;
+    els.status.textContent = `데이터 로드 완료 · 총 ${RAW_ROWS.length.toLocaleString()}건 (서비스 기술내역=COST 또는 값 없음 행 제외) · ${new Date().toLocaleTimeString('ko-KR')} 기준`;
     els.status.classList.remove('error');
     runQuery();
   }catch(err){
