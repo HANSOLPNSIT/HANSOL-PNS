@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>용역 공수 투입 분석 | </title>
+<title>용역 공수 투입 분석 | 한솔PNS</title>
 <style>
   :root{
     --ink:#1E1E1E;
@@ -663,8 +663,11 @@ async function loadData(isRefresh){
         project: (get(COL['프로젝트명']) || '').toString().trim(),
         note: (COL['비고'] !== undefined ? (get(COL['비고']) || '') : '').toString().trim(),
         poNumber: (COL['PO번호'] !== undefined ? (get(COL['PO번호']) || '') : '').toString().trim(),
+        serviceDetail: (COL['서비스 기술내역'] !== undefined ? (get(COL['서비스 기술내역']) || '') : '').toString(),
       };
-    }).filter(r => r.poDate !== null);
+    }).filter(r => r.poDate !== null)
+      // 서비스 기술내역이 COST인 행은 등급내역(서비스 등급내역) 값 유무와 관계없이 무조건 집계 대상에서 제외함
+      .filter(r => r.serviceDetail.replace(/\s+/g, '').toUpperCase() !== 'COST');
 
     // 대분류/중분류 옵션 갱신. 새로고침(조회 버튼)인 경우 기존 선택값이 여전히 유효하면 유지함.
     populateMajorOptions();
@@ -679,7 +682,7 @@ async function loadData(isRefresh){
       setDefaultDates();
     }
 
-    els.status.textContent = `데이터 로드 완료 · 총 ${RAW_ROWS.length.toLocaleString()}건 (원본 라인 기준) · ${new Date().toLocaleTimeString('ko-KR')} 기준`;
+    els.status.textContent = `데이터 로드 완료 · 총 ${RAW_ROWS.length.toLocaleString()}건 (서비스 기술내역=COST 행은 등급내역 값과 무관하게 전부 제외) · ${new Date().toLocaleTimeString('ko-KR')} 기준`;
     els.status.classList.remove('error');
     runQuery();
   }catch(err){
