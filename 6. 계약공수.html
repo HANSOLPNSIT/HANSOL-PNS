@@ -170,6 +170,37 @@
     color:var(--ink-soft);
   }
   .kpi.hero .value .unit{color:#C4C4C4;}
+  .value-list{
+    display:flex;
+    flex-direction:column;
+    gap:6px;
+  }
+  .value-list .vl-row{
+    display:flex;
+    justify-content:space-between;
+    align-items:baseline;
+    gap:12px;
+  }
+  .value-list .vl-unit{
+    font-size:12.5px;
+    font-weight:600;
+    color:#C4C4C4;
+    white-space:nowrap;
+  }
+  .value-list .vl-num{
+    font-family:var(--mono);
+    font-size:22px;
+    font-weight:700;
+    color:#fff;
+    white-space:nowrap;
+  }
+  .value-list .vl-total{
+    border-top:1px solid #3D3D3D;
+    margin-top:4px;
+    padding-top:8px;
+  }
+  .value-list .vl-total .vl-unit{color:#B0B0B0;font-weight:700;}
+  .value-list .vl-total .vl-num{font-size:24px;}
   .kpi .sub{
     margin-top:8px;
     font-size:12px;
@@ -446,8 +477,8 @@
 
     <div class="kpi-row">
       <div class="kpi hero">
-        <div class="label">총 공수 (전체 단위 합산)</div>
-        <div class="value" id="kpi-mm">–</div>
+        <div class="label">총 공수 (단위별 합계)</div>
+        <div class="value-list" id="kpi-mm"></div>
         <div class="sub" id="kpi-mm-sub">해당 기간 · 조건 기준</div>
       </div>
       <div class="kpi">
@@ -626,6 +657,7 @@ async function loadData(){
         line: parseNum(get(COL['서비스 라인'])),
         grade: normGrade(get(COL['서비스 등급내역'])),
         project: (get(COL['프로젝트명']) || '').toString().trim(),
+        note: (COL['비고'] !== undefined ? (get(COL['비고']) || '') : '').toString().trim(),
       };
     }).filter(r => r.poDate !== null);
 
@@ -691,8 +723,11 @@ function runQuery(){
   filtered.forEach(r => { unitSums[r.unit] = (unitSums[r.unit] || 0) + r.qty; });
   const grandTotal = Object.values(unitSums).reduce((a,b) => a+b, 0);
 
-  els.kpiMM.innerHTML = `${fmt(grandTotal, 2)}`;
-  els.kpiMMSub.textContent = `${els.start.value} ~ ${els.end.value} · ${major === '__ALL__' ? '전체 대분류' : major}${minor !== '__ALL__' ? ' / ' + minor : ''} · 서비스단위 전체 합산`;
+  const unitSumsSorted = Object.entries(unitSums).sort((a,b) => b[1]-a[1]);
+  els.kpiMM.innerHTML = unitSumsSorted.map(([u, v]) =>
+    `<div class="vl-row"><span class="vl-unit">${escapeHtml(u)}</span><span class="vl-num">${fmt(v,2)}</span></div>`
+  ).join('') + `<div class="vl-row vl-total"><span class="vl-unit">합계</span><span class="vl-num">${fmt(grandTotal,2)}</span></div>`;
+  els.kpiMMSub.textContent = `${els.start.value} ~ ${els.end.value} · ${major === '__ALL__' ? '전체 대분류' : major}${minor !== '__ALL__' ? ' / ' + minor : ''} · 단위별 합계`;
   els.kpiRows.innerHTML = `${filtered.length.toLocaleString()}<span class="unit">건</span>`;
   els.kpiRowsSub.textContent = `전체 ${RAW_ROWS.length.toLocaleString()}건 중`;
 
@@ -856,9 +891,10 @@ function renderDetailGroups(filtered){
         <td style="text-align:right;">${fmt(r.qty,2)}</td>
         <td class="txt">${escapeHtml(r.unit)}</td>
         <td style="text-align:right;">${r.line}</td>
+        <td class="txt" style="max-width:260px;white-space:normal;">${escapeHtml(r.note)}</td>
       </tr>`).join('');
     const moreNote = rows.length > 300
-      ? `<tr><td colspan="7" class="txt" style="text-align:center;color:var(--ink-soft);">외 ${rows.length-300}건 더 있음 (최신 300건만 표시)</td></tr>`
+      ? `<tr><td colspan="8" class="txt" style="text-align:center;color:var(--ink-soft);">외 ${rows.length-300}건 더 있음 (최신 300건만 표시)</td></tr>`
       : '';
 
     return `
@@ -872,7 +908,7 @@ function renderDetailGroups(filtered){
             <thead>
               <tr>
                 <th>PO생성일</th><th>프로젝트명</th><th>기술세부</th>
-                <th>등급</th><th style="text-align:right;">서비스수량</th><th>단위</th><th>라인</th>
+                <th>등급</th><th style="text-align:right;">서비스수량</th><th>단위</th><th>라인</th><th>비고</th>
               </tr>
             </thead>
             <tbody>${rowsHtml}${moreNote}</tbody>
