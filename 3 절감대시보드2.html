@@ -165,6 +165,7 @@ tr.reason-row.hidden{display:none}
       background:#ffffff;
     }
     .field-label{font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:4px}
+    .fx-warning{color:var(--warn);font-weight:600}
   </style>
 </head>
 <body>
@@ -181,9 +182,15 @@ tr.reason-row.hidden{display:none}
       <label class="field-label">시트 GID
         <input type="text" id="sheetGid" style="width:120px" />
       </label>
+      <label class="field-label">USD→KRW 연평균 환율(매매기준율)
+        <input type="text" id="fxRate" style="width:110px" placeholder="예: 1350" />
+      </label>
       <button id="loadBtn">데이터 불러오기</button>
       <button id="exportBtn">엑셀로 출력</button>
+      <span class="legend">환율 조회: <a href="https://www.kebhana.com/cont/mall/mall15/mall1502/index.jsp" target="_blank" rel="noopener">하나은행 평균환율</a> (조회연도 연평균 최초고시 매매기준율 입력)</span>
     </div>
+
+    <div class="note fx-warning" id="fxWarning" style="display:none"></div>
 
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
@@ -217,17 +224,16 @@ tr.reason-row.hidden{display:none}
         <tfoot></tfoot>
       </table>
       <div class="note">※ 데이터가 없는 월은 '-'로 표시됩니다. 상세 내역에서 PO 행을 클릭하면 절감사유를 확인할 수 있습니다.</div>
-      <div class="note">※ 절감율 = Σ절감금액 ÷ Σ(절감금액÷시트 절감율 열로 역산한 발주금액), 절감율 열이 채워진 건만 반영됩니다.</div>
+      <div class="note">※ 기준일은 PO릴리즈일이며, 절감율 = Σ절감금액 ÷ Σ발주금액 (발주금액·절감금액 원본 값을 직접 합산, USD는 입력한 환율로 KRW 환산 후 합산)</div>
     </div>
 
     <div class="card" style="margin-top:14px">
       <strong id="groupOrderStatsTitle">구매그룹별 총 발주금액 및 절감율</strong>
-      <div class="legend" style="margin-top:4px">구매그룹 740(ITO계약), 400·300(프로젝트계약/투자 또는 자산)으로 구분하고, 구매처명에 '화웨이' 또는 '엑스퓨젼'이 포함된 총판프로젝트는 별도로 분리해서 집계 · 통화(KRW/USD)별로 표시 · 행을 클릭하면 상세 리스트가 펼쳐집니다</div>
+      <div class="legend" style="margin-top:4px">구매그룹 740(ITO계약), 400·300(프로젝트계약/투자 또는 자산)으로 구분하고, 구매처명에 '화웨이' 또는 '엑스퓨젼'이 포함된 총판프로젝트는 별도로 분리해서 집계 · 행을 클릭하면 상세 리스트가 펼쳐집니다</div>
       <table id="groupOrderStatsTable" style="margin-top:10px">
         <thead>
           <tr>
             <th>구분</th>
-            <th>통화</th>
             <th>총 발주금액</th>
             <th>총 절감금액</th>
             <th>절감율</th>
@@ -235,7 +241,7 @@ tr.reason-row.hidden{display:none}
         </thead>
         <tbody></tbody>
       </table>
-      <div class="note">※ 절감율 = 총 절감금액 ÷ 총 발주금액 (시트의 절감율 열을 쓰지 않고, 발주금액·절감금액 원본 값을 그대로 합산해서 직접 계산한 값입니다. 월별 절감 현황의 절감율과는 계산 방식이 다릅니다.)</div>
+      <div class="note">※ 기준일은 PO릴리즈일, 절감율 = 총 절감금액 ÷ 총 발주금액. USD 건은 입력한 연평균 환율로 KRW 환산 후 합산됩니다 (모든 값은 KRW 기준입니다).</div>
     </div>
 
     <div class="card" style="margin-top:14px">
@@ -253,7 +259,7 @@ tr.reason-row.hidden{display:none}
     </div>
 
     <div class="footer">
-      ⚙️ 열 이름 매핑(PO 시트): <code>PO 생성일</code>, <code>PO번호</code>, <code>구매처명</code>, <code>구매오더내역</code>, <code>절감금액</code>, <code>절감율</code>, <code>구매그룹</code>, <code>발주금액</code>, <code>통화키</code>. 헤더는 1행에 위치해야 합니다.
+      ⚙️ 열 이름 매핑(PO 시트): <code>PO릴리즈일</code>, <code>PO번호</code>, <code>구매처명</code>, <code>구매오더내역</code>, <code>절감금액</code>, <code>절감율</code>, <code>구매그룹</code>, <code>발주금액</code>, <code>통화키</code>. 헤더는 1행에 위치해야 합니다.
     </div>
   </div>
 
@@ -281,9 +287,50 @@ $('#sheetGid').value = '803604323';
 // 절감사유 시트 (같은 스프레드시트 내 PO번호 ↔ 절감사유 매핑 시트)
 const REASON_GID = '1498865402';
 
+// 연도별 USD→KRW 환율 (사용자 입력, 하나은행 연평균 최초고시 매매기준율)
+const usdToKrwRates = {};
+
+function currentYear(){
+  return clampYear(parseInt($('#yearSelect').value,10));
+}
+
+function convertToKRW(amount, currency, year){
+  if(currency !== 'USD') return amount;
+  const rate = usdToKrwRates[year];
+  return (rate && isFinite(rate)) ? amount * rate : amount;
+}
+
+function updateFxWarning(rows, year){
+  const el = $('#fxWarning');
+  const hasUSD = rows.some(r=>{
+    const d = parseKoreanDate(r['PO릴리즈일']);
+    return d && d.getUTCFullYear()===year && getCurrency(r)==='USD';
+  });
+  const rateSet = usdToKrwRates[year] != null;
+  if(hasUSD && !rateSet){
+    el.textContent = `⚠️ ${year}년에 USD 발주 건이 있는데 환율이 입력되지 않아, USD 금액이 환산 없이 그대로(숫자만) 합산되고 있습니다. 위 "USD→KRW 연평균 환율"에 값을 입력해주세요.`;
+    el.style.display = '';
+  } else {
+    el.textContent = '';
+    el.style.display = 'none';
+  }
+}
+
 $('#loadBtn').addEventListener('click', () => { loadAndRender(); });
 $('#exportBtn').addEventListener('click', () => { exportToExcel(); });
 $('#yearSelect').addEventListener('change', () => {
+  const year = currentYear();
+  $('#fxRate').value = usdToKrwRates[year] ?? '';
+  if(window.__ROWS) renderAll(window.__ROWS);
+});
+$('#fxRate').addEventListener('change', () => {
+  const year = currentYear();
+  const val = parseFloat($('#fxRate').value);
+  if(isFinite(val) && val > 0){
+    usdToKrwRates[year] = val;
+  } else {
+    delete usdToKrwRates[year];
+  }
   if(window.__ROWS) renderAll(window.__ROWS);
 });
 
@@ -372,24 +419,23 @@ function monthKey(y,m){ return `${y}-${String(m).padStart(2,'0')}` }
 
 function aggregate(rows, targetYear){
   const byM = new Map();
-  const pick = (r, k)=> r[k];
 
   for(const r of rows){
-    const d = parseKoreanDate(pick(r, 'PO 생성일'));
+    const d = parseKoreanDate(r['PO릴리즈일']);
     if(!d) continue;
     const y = d.getUTCFullYear();
     if(y !== targetYear) continue;
     const m = d.getUTCMonth()+1;
 
-    const amt = parseAmount(pick(r, '절감금액'));
-    const rate = normRate(pick(r, '절감율'));
-    const base = (rate && rate>0) ? (amt / rate) : null;
+    const currency = getCurrency(r);
+    const savingsKRW = convertToKRW(parseAmount(r['절감금액']), currency, targetYear);
+    const orderKRW = convertToKRW(parseAmount(r['발주금액']), currency, targetYear);
 
     const key = monthKey(y,m);
     if(!byM.has(key)) byM.set(key, {y,m, amt:0, base:0, rows:[]});
     const b = byM.get(key);
-    b.amt += amt;
-    if(base!=null && isFinite(base)) b.base += base;
+    b.amt += savingsKRW;
+    b.base += orderKRW;
     b.rows.push(r);
   }
 
@@ -432,7 +478,7 @@ function aggregatePurchaseGroups(rows, targetYear){
   const counts = new Map();
   let dispatchCount = 0; // 총판프로젝트 (구매처명에 화웨이/엑스퓨젼이 포함된 건, 구매그룹 분류와 별개로 추가 집계)
   for(const r of rows){
-    const d = parseKoreanDate(r['PO 생성일']);
+    const d = parseKoreanDate(r['PO릴리즈일']);
     if(!d || d.getUTCFullYear()!==targetYear) continue;
     const label = mapPurchaseGroup(r['구매그룹']);
     counts.set(label, (counts.get(label)||0) + 1);
@@ -467,23 +513,24 @@ function assignOrderGroupBucket(r){
   return mapGroupBucket(parseGroupCode(r['구매그룹']));
 }
 
-// 구매그룹 740 / 400+300 / 총판프로젝트 기준 총 발주금액, 절감금액, 절감율 집계 (통화별 구분)
+// 구매그룹 740 / 400+300 / 총판프로젝트 기준 총 발주금액, 절감금액, 절감율 집계 (USD는 입력한 환율로 KRW 환산 후 통합)
 function aggregateOrderStatsByGroup(rows, targetYear){
-  const map = new Map(); // bucketLabel -> Map(currency -> {orderSum, savingsSum})
+  const map = new Map(); // bucketLabel -> {orderSum, savingsSum}
   for(const r of rows){
-    const d = parseKoreanDate(r['PO 생성일']);
+    const d = parseKoreanDate(r['PO릴리즈일']);
     if(!d || d.getUTCFullYear()!==targetYear) continue;
 
     const bucket = assignOrderGroupBucket(r);
     if(!bucket) continue;
 
     const currency = getCurrency(r);
-    if(!map.has(bucket)) map.set(bucket, new Map());
-    const curMap = map.get(bucket);
-    if(!curMap.has(currency)) curMap.set(currency, {orderSum:0, savingsSum:0});
-    const b = curMap.get(currency);
-    b.orderSum += parseAmount(r['발주금액']);
-    b.savingsSum += parseAmount(r['절감금액']);
+    const orderKRW = convertToKRW(parseAmount(r['발주금액']), currency, targetYear);
+    const savingsKRW = convertToKRW(parseAmount(r['절감금액']), currency, targetYear);
+
+    if(!map.has(bucket)) map.set(bucket, {orderSum:0, savingsSum:0});
+    const b = map.get(bucket);
+    b.orderSum += orderKRW;
+    b.savingsSum += savingsKRW;
   }
   return map;
 }
@@ -500,6 +547,8 @@ function renderAll(rows){
   const year = clampYear(parseInt($('#yearSelect').value,10));
   const monthly = aggregate(rows, year);
   const t1 = totals(monthly);
+
+  updateFxWarning(rows, year);
 
   $('#tableTitle').textContent = `${year}년 월별 절감 현황`;
   $('#kpiYearLabel').textContent = `${year}년 총 절감금액`;
@@ -607,41 +656,38 @@ function renderGroupOrderStats(rows, year){
   const tbody = document.createElement('tbody');
   let any = false;
   for(const label of order){
-    const curMap = map.get(label);
-    if(!curMap || !curMap.size) continue;
+    const v = map.get(label);
+    if(!v) continue;
     any = true;
-    for(const [currency, v] of curMap.entries()){
-      const rate = v.orderSum>0 ? (v.savingsSum/v.orderSum) : null;
+    const rate = v.orderSum>0 ? (v.savingsSum/v.orderSum) : null;
 
-      const tr = document.createElement('tr');
-      tr.className = 'month-row';
-      tr.innerHTML = `
-        <td><span class="caret">▶</span>${label}</td>
-        <td>${currency}</td>
-        <td>${fmtAmtByCurrency(v.orderSum, currency)}</td>
-        <td>${fmtAmtByCurrency(v.savingsSum, currency)}</td>
-        <td>${fmtPct(rate)}</td>
-      `;
+    const tr = document.createElement('tr');
+    tr.className = 'month-row';
+    tr.innerHTML = `
+      <td><span class="caret">▶</span>${label}</td>
+      <td>${fmtWon(v.orderSum)}</td>
+      <td>${fmtWon(v.savingsSum)}</td>
+      <td>${fmtPct(rate)}</td>
+    `;
 
-      const detailTr = document.createElement('tr');
-      detailTr.className = 'detail-row hidden';
-      const detailTd = document.createElement('td');
-      detailTd.colSpan = 5;
-      detailTd.appendChild(buildGroupDetailTable(year, label, currency));
-      detailTr.appendChild(detailTd);
+    const detailTr = document.createElement('tr');
+    detailTr.className = 'detail-row hidden';
+    const detailTd = document.createElement('td');
+    detailTd.colSpan = 4;
+    detailTd.appendChild(buildGroupDetailTable(year, label));
+    detailTr.appendChild(detailTd);
 
-      tr.addEventListener('click', ()=>{
-        const isOpen = tr.classList.contains('open');
-        tr.classList.toggle('open', !isOpen);
-        detailTr.classList.toggle('hidden', isOpen);
-      });
+    tr.addEventListener('click', ()=>{
+      const isOpen = tr.classList.contains('open');
+      tr.classList.toggle('open', !isOpen);
+      detailTr.classList.toggle('hidden', isOpen);
+    });
 
-      tbody.appendChild(tr);
-      tbody.appendChild(detailTr);
-    }
+    tbody.appendChild(tr);
+    tbody.appendChild(detailTr);
   }
   if(!any){
-    tbody.innerHTML = `<tr><td colspan="5" class="muted">해당 연도에 데이터가 없습니다.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="4" class="muted">해당 연도에 데이터가 없습니다.</td></tr>`;
   }
 
   const table = $('#groupOrderStatsTable');
@@ -659,7 +705,7 @@ function buildDetailTableGeneric(filtered, opts){
   const thead = document.createElement('thead');
   thead.innerHTML = `
     <tr>
-      <th>PO 생성일</th>
+      <th>PO릴리즈일</th>
       <th>PO번호</th>
       <th>구매처명</th>
       <th>구매오더내역</th>
@@ -679,12 +725,14 @@ function buildDetailTableGeneric(filtered, opts){
   } else {
     const reasonMap = window.__REASON_MAP || new Map();
     for(const r of filtered){
-      const d = parseKoreanDate(r['PO 생성일']);
+      const d = parseKoreanDate(r['PO릴리즈일']);
       const po = r['PO번호'];
       const vend = r['구매처명'];
       const line = r['구매오더내역'];
-      const amt = parseAmount(r['절감금액']);
-      const rate = normRate(r['절감율']);
+      const currency = getCurrency(r);
+      const savingsRaw = parseAmount(r['절감금액']);
+      const orderRaw = parseAmount(r['발주금액']);
+      const rate = orderRaw>0 ? (savingsRaw/orderRaw) : null;
       const reason = reasonMap.get(normPoNo(po)) || '';
 
       const tr = document.createElement('tr');
@@ -694,8 +742,8 @@ function buildDetailTableGeneric(filtered, opts){
         <td>${po??''}</td>
         <td>${vend??''}</td>
         <td>${line??''}</td>
-        ${includeOrderAmt ? `<td class="muted">${fmtAmtByCurrency(parseAmount(r['발주금액']), getCurrency(r))}</td>` : ''}
-        <td class="muted">${fmtWon(amt)}</td>
+        ${includeOrderAmt ? `<td class="muted">${fmtAmtByCurrency(orderRaw, currency)}</td>` : ''}
+        <td class="muted">${fmtAmtByCurrency(savingsRaw, currency)}</td>
         <td class="muted">${fmtPct(rate)}</td>
       `;
 
@@ -723,7 +771,7 @@ function buildDetailTableGeneric(filtered, opts){
 function buildDetailTable(year, month){
   const rows = (window.__ROWS||[]);
   const filtered = rows.filter(r=>{
-    const d = parseKoreanDate(r['PO 생성일']);
+    const d = parseKoreanDate(r['PO릴리즈일']);
     if(!(d && d.getUTCFullYear()===year && (d.getUTCMonth()+1)===month)) return false;
     const amt = parseAmount(r['절감금액']);
     return amt > 0;
@@ -734,14 +782,13 @@ function buildDetailTable(year, month){
   });
 }
 
-// 구매그룹(740 / 400+300) + 통화 기준 상세 리스트 (발주금액 열 포함)
-function buildGroupDetailTable(year, groupLabel, currency){
+// 구매그룹(740 / 400+300) / 총판프로젝트 기준 상세 리스트 (발주금액 열 포함)
+function buildGroupDetailTable(year, groupLabel){
   const rows = (window.__ROWS||[]);
   const filtered = rows.filter(r=>{
-    const d = parseKoreanDate(r['PO 생성일']);
+    const d = parseKoreanDate(r['PO릴리즈일']);
     if(!(d && d.getUTCFullYear()===year)) return false;
     if(assignOrderGroupBucket(r) !== groupLabel) return false;
-    if(getCurrency(r) !== currency) return false;
     const amt = parseAmount(r['절감금액']);
     return amt > 0;
   });
@@ -786,25 +833,23 @@ function exportToExcel(){
   summaryAoa.push(['합계', groupTotal]);
   summaryAoa.push(['총판프로젝트 (구매처명에 화웨이/엑스퓨젼 포함, 중복 포함)', dispatchCount]);
 
-  // 구매그룹(740 / 400+300)별 총 발주금액 및 절감율
+  // 구매그룹(740 / 400+300 / 총판프로젝트)별 총 발주금액 및 절감율 (USD는 환율 적용해 KRW로 통합)
   const groupOrderMap = aggregateOrderStatsByGroup(window.__ROWS, year);
   const groupOrderOrder = [GROUP_BUCKET_740, GROUP_BUCKET_400_300, GROUP_BUCKET_DISPATCH];
-  const pctRowsGroup = []; // E열 절감율 서식 대상
-  const amtRowsGroup = []; // C,D열 금액 서식 대상
+  const pctRowsGroup = []; // D열 절감율 서식 대상
+  const amtRowsGroup = []; // B,C열 금액 서식 대상
 
   summaryAoa.push([]);
-  summaryAoa.push(['구매그룹별 총 발주금액 및 절감율 (740 / 400+300 / 총판프로젝트 별도)']);
-  summaryAoa.push(['구분', '통화', '총 발주금액', '총 절감금액', '절감율']);
+  summaryAoa.push(['구매그룹별 총 발주금액 및 절감율 (740 / 400+300 / 총판프로젝트 별도, 전액 KRW 환산)']);
+  summaryAoa.push(['구분', '총 발주금액', '총 절감금액', '절감율']);
   for(const label of groupOrderOrder){
-    const curMap = groupOrderMap.get(label);
-    if(!curMap) continue;
-    for(const [currency, v] of curMap.entries()){
-      const rate = v.orderSum>0 ? v.savingsSum/v.orderSum : '';
-      summaryAoa.push([label, currency, Math.round(v.orderSum), Math.round(v.savingsSum), rate]);
-      const rowNum = summaryAoa.length;
-      pctRowsGroup.push(rowNum);
-      amtRowsGroup.push(rowNum);
-    }
+    const v = groupOrderMap.get(label);
+    if(!v) continue;
+    const rate = v.orderSum>0 ? v.savingsSum/v.orderSum : '';
+    summaryAoa.push([label, Math.round(v.orderSum), Math.round(v.savingsSum), rate]);
+    const rowNum = summaryAoa.length;
+    pctRowsGroup.push(rowNum);
+    amtRowsGroup.push(rowNum);
   }
 
   const wsSummary = XLSX.utils.aoa_to_sheet(summaryAoa);
@@ -817,37 +862,38 @@ function exportToExcel(){
     const amtCell = wsSummary[`C${i}`];
     if(amtCell && typeof amtCell.v === 'number') amtCell.z = '#,##0';
   }
-  // 구매그룹별 총 발주금액 섹션의 % / 금액 서식 적용 (C,D열 금액 / E열 %)
+  // 구매그룹별 총 발주금액 섹션의 % / 금액 서식 적용 (B,C열 금액 / D열 %)
   for(const rowNum of pctRowsGroup){
-    const cell = wsSummary[`E${rowNum}`];
+    const cell = wsSummary[`D${rowNum}`];
     if(cell && typeof cell.v === 'number') cell.z = '0.0%';
   }
   for(const rowNum of amtRowsGroup){
+    const cellB = wsSummary[`B${rowNum}`];
+    if(cellB && typeof cellB.v === 'number') cellB.z = '#,##0';
     const cellC = wsSummary[`C${rowNum}`];
     if(cellC && typeof cellC.v === 'number') cellC.z = '#,##0';
-    const cellD = wsSummary[`D${rowNum}`];
-    if(cellD && typeof cellD.v === 'number') cellD.z = '#,##0';
   }
 
   // 2) 상세 내역 시트 (절감사유 포함, 클릭 없이 전체 노출)
   const detailAoa = [
-    ['월', 'PO 생성일', 'PO번호', '구매처명', '구매오더내역', '절감금액', '절감율', '절감사유']
+    ['월', 'PO릴리즈일', 'PO번호', '구매처명', '구매오더내역', '통화', '발주금액', '절감금액', '절감율', '절감사유']
   ];
-  const pick = (r, k)=> r[k];
   for(let m=1;m<=12;m++){
     const filtered = window.__ROWS.filter(r=>{
-      const d = parseKoreanDate(pick(r,'PO 생성일'));
+      const d = parseKoreanDate(r['PO릴리즈일']);
       if(!(d && d.getUTCFullYear()===year && (d.getUTCMonth()+1)===m)) return false;
-      const amt = parseAmount(pick(r,'절감금액'));
+      const amt = parseAmount(r['절감금액']);
       return amt > 0;
     });
     for(const r of filtered){
-      const d = parseKoreanDate(pick(r,'PO 생성일'));
-      const po = pick(r,'PO번호');
-      const vend = pick(r,'구매처명');
-      const line = pick(r,'구매오더내역');
-      const amt = parseAmount(pick(r,'절감금액'));
-      const rate = normRate(pick(r,'절감율'));
+      const d = parseKoreanDate(r['PO릴리즈일']);
+      const po = r['PO번호'];
+      const vend = r['구매처명'];
+      const line = r['구매오더내역'];
+      const currency = getCurrency(r);
+      const savingsRaw = parseAmount(r['절감금액']);
+      const orderRaw = parseAmount(r['발주금액']);
+      const rate = orderRaw>0 ? (savingsRaw/orderRaw) : '';
       const reason = reasonMap.get(normPoNo(po)) || '';
       detailAoa.push([
         m + '월',
@@ -855,19 +901,23 @@ function exportToExcel(){
         po ?? '',
         vend ?? '',
         line ?? '',
-        Math.round(amt),
-        rate!=null ? rate : '',
+        currency,
+        Math.round(orderRaw),
+        Math.round(savingsRaw),
+        rate,
         reason
       ]);
     }
   }
 
   const wsDetail = XLSX.utils.aoa_to_sheet(detailAoa);
-  wsDetail['!cols'] = [{wch:6},{wch:12},{wch:14},{wch:22},{wch:36},{wch:14},{wch:10},{wch:30}];
+  wsDetail['!cols'] = [{wch:6},{wch:12},{wch:14},{wch:22},{wch:36},{wch:8},{wch:14},{wch:14},{wch:10},{wch:30}];
   for(let i=2;i<=detailAoa.length;i++){
-    const rateCell = wsDetail[`G${i}`];
+    const rateCell = wsDetail[`I${i}`];
     if(rateCell && typeof rateCell.v === 'number') rateCell.z = '0.0%';
-    const amtCell = wsDetail[`F${i}`];
+    const orderCell = wsDetail[`G${i}`];
+    if(orderCell && typeof orderCell.v === 'number') orderCell.z = '#,##0';
+    const amtCell = wsDetail[`H${i}`];
     if(amtCell && typeof amtCell.v === 'number') amtCell.z = '#,##0';
   }
 
