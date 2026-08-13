@@ -484,10 +484,10 @@
       <div class="panel">
         <p class="panel-title">서비스단위별 수량 합계</p>
         <table>
-          <thead><tr><th>단위</th><th style="text-align:right;">합계</th><th style="text-align:right;">비중</th></tr></thead>
+          <thead><tr><th>단위</th><th style="text-align:right;">합계</th><th style="text-align:right;">M.M 환산</th><th style="text-align:right;">비중</th></tr></thead>
           <tbody id="unit-table"></tbody>
         </table>
-        <p class="footnote">※ 합계는 단위별 원본 서비스수량임. 비중(%)은 M.D를 21 M.D = 1 M.M 기준으로 환산한 값끼리 비교한 비율이며, M.M·EA는 원본 수량을 그대로 사용함.</p>
+        <p class="footnote">※ 합계는 단위별 원본 서비스수량임. "M.M 환산"은 M.D를 21 M.D = 1 M.M 기준으로 변환한 값(M.M은 원본 그대로, 그 외 단위는 해당 없음). 비중(%)은 이 환산값끼리 비교한 비율임.</p>
       </div>
     </div>
 
@@ -654,6 +654,7 @@ async function loadData(isRefresh){
         grade: normGrade(get(COL['서비스 등급내역'])),
         project: (get(COL['프로젝트명']) || '').toString().trim(),
         note: (COL['비고'] !== undefined ? (get(COL['비고']) || '') : '').toString().trim(),
+        poNumber: (COL['PO번호'] !== undefined ? (get(COL['PO번호']) || '') : '').toString().trim(),
       };
     }).filter(r => r.poDate !== null);
 
@@ -741,7 +742,8 @@ function runQuery(){
   const unitRows = Object.entries(unitSums).sort((a,b) => b[1]-a[1]);
   els.unitTable.innerHTML = unitRows.map(([u, sum]) => {
     const pct = convertedTotal ? (unitConvertedForPct[u]/convertedTotal*100) : 0;
-    return `<tr><td class="txt">${escapeHtml(u)}</td><td style="text-align:right;">${fmt(sum,2)}</td><td style="text-align:right;">${fmt(pct,1)}%</td></tr>`;
+    const mmEquiv = u === 'M.D' ? `${fmt(sum / MD_PER_MM, 2)} M/M` : (u === 'M.M' ? `${fmt(sum, 2)} M/M` : '–');
+    return `<tr><td class="txt">${escapeHtml(u)}</td><td style="text-align:right;">${fmt(sum,2)}</td><td style="text-align:right;">${mmEquiv}</td><td style="text-align:right;">${fmt(pct,1)}%</td></tr>`;
   }).join('');
 
   // 인원 집계: 서비스 라인 == 10
@@ -900,6 +902,7 @@ function renderDetailGroups(filtered){
     const rowsHtml = capped.map(r => `
       <tr>
         <td>${r.poDate.getFullYear()}.${String(r.poDate.getMonth()+1).padStart(2,'0')}.${String(r.poDate.getDate()).padStart(2,'0')}</td>
+        <td>${escapeHtml(r.poNumber)}</td>
         <td class="txt">${escapeHtml(r.project)}</td>
         <td class="txt">${escapeHtml(r.minor)}</td>
         <td class="txt">${escapeHtml(r.grade)}</td>
@@ -909,7 +912,7 @@ function renderDetailGroups(filtered){
         <td class="txt" style="max-width:260px;white-space:normal;">${escapeHtml(r.note)}</td>
       </tr>`).join('');
     const moreNote = rows.length > 300
-      ? `<tr><td colspan="8" class="txt" style="text-align:center;color:var(--ink-soft);">외 ${rows.length-300}건 더 있음 (최신 300건만 표시)</td></tr>`
+      ? `<tr><td colspan="9" class="txt" style="text-align:center;color:var(--ink-soft);">외 ${rows.length-300}건 더 있음 (최신 300건만 표시)</td></tr>`
       : '';
 
     return `
@@ -922,7 +925,7 @@ function renderDetailGroups(filtered){
           <table>
             <thead>
               <tr>
-                <th>PO생성일</th><th>프로젝트명</th><th>기술세부</th>
+                <th>PO생성일</th><th>PO번호</th><th>프로젝트명</th><th>기술세부</th>
                 <th>등급</th><th style="text-align:right;">서비스수량</th><th>단위</th><th>라인</th><th>비고</th>
               </tr>
             </thead>
